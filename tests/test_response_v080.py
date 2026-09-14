@@ -102,6 +102,53 @@ def test_custom_customer_target_speed_is_not_locked_to_oem_profile():
     )
 
 
+def test_current_i10_i90_response_uses_interpolated_crossings():
+    result = analyze_response_time_v080(
+        _response_dataset(0.300),
+        ResponseConfig(standard=ResponseStandard.BMW),
+        target_speeds_mps=(0.3,),
+    )
+    row = result.events.iloc[0]
+
+    expected_i10 = row["Current Start A"] + 0.10 * (
+        row["Current End A"] - row["Current Start A"]
+    )
+    expected_i90 = row["Current Start A"] + 0.90 * (
+        row["Current End A"] - row["Current Start A"]
+    )
+    assert row["Current 10% A"] == pytest.approx(expected_i10)
+    assert row["Current 90% A"] == pytest.approx(expected_i90)
+    assert row["I10 Crossing Time s"] < row["I90 Crossing Time s"]
+    assert row["Current Response I10-I90 ms"] == pytest.approx(
+        (row["I90 Crossing Time s"] - row["I10 Crossing Time s"]) * 1000.0
+    )
+    assert row["Current Response I10-I90 ms"] == pytest.approx(
+        2 * 0.00045 * np.log(9) * 1000.0,
+        abs=0.15,
+    )
+    assert result.settings["Current Response Timing"] == (
+        "I90% crossing time minus I10% crossing time"
+    )
+
+
+def test_current_i10_i90_response_supports_falling_current_step():
+    dataset = _response_dataset(0.300)
+    dataset.data[CURRENT] = 1.90 - dataset.data[CURRENT]
+    result = analyze_response_time_v080(
+        dataset,
+        ResponseConfig(standard=ResponseStandard.BMW),
+        target_speeds_mps=(0.3,),
+    )
+    row = result.events.iloc[0]
+
+    assert row["Current 10% A"] > row["Current 90% A"]
+    assert row["I10 Crossing Time s"] < row["I90 Crossing Time s"]
+    assert row["Current Response I10-I90 ms"] == pytest.approx(
+        2 * 0.00045 * np.log(9) * 1000.0,
+        abs=0.15,
+    )
+
+
 @pytest.mark.parametrize("force_scale", (1.0, -1.0))
 def test_force_thresholds_keep_f90_before_f100_in_response_direction(force_scale):
     """F90 stays between F63 and the F100 endpoint for either force sign."""

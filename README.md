@@ -8,7 +8,7 @@
 - 编制：研发院技术中心　李振海
 - 发布日期：2026/9/7
 - 发布：第1版
-- 当前功能版本：`V0.8.18`
+- 当前功能版本：`V0.8.19`
 - Python package version：`1.0.0`
 - GitHub 仓库：[lizhenhai2024-alt/Damper-Test-Data-Analyzer](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer)
 
@@ -28,6 +28,7 @@
 - 响应时间以用户设置的电流触发比例交点为零点；电流图的 I 下标随触发比例变化并定位在实际触发交点。起始载荷阈值默认 F₁%，可调整；t 起始响应时间使用相同下标。
 - F 起始阈值与 F₆₃% 可分别勾选是否在阻尼力图中显示；关闭后对应水平线、竖直响应线和时间文字同步隐藏。F₉₀% 与 F₁₀₀% 始终显示。
 - 响应图采用与轴标题同号的正常字重透明标注；载荷阈值标签位于左侧，参考虚线连续；竖虚线与实测曲线交点加圆点，载荷响应时间交替分布于曲线两侧。
+- 响应图可切换为双 Y 轴 I₁₀%—I₉₀% 模式：X 轴为时间，左轴及蓝色曲线为电流，右轴及红色曲线为阻尼力；两条竖虚线标记 I₁₀% 与 I₉₀% 的线性插值时刻，并在两条曲线上各显示两个交点及 `Δt(I₁₀%→I₉₀%)`。该时间差同时写入响应结果与 Excel。
 - Summary / Run / Cycle 三级结果
 - Data Quality：按 acquisition block 输出采样点数、采样率、时间间隔、位移范围、载荷范围、电流中位数/标准差及结构性异常
 - GUI 分析前执行 Data Quality preflight；结构性 `Invalid` 输入停止分析
@@ -43,7 +44,7 @@
 - `.xlsx` 与 PNG 导出；菜单栏可选 150 / 300 / 600 PPI，默认 300 PPI。PNG 为无损位图，清晰度由导出像素尺寸与查看比例决定；打印或裁切请选择 600 PPI，并按 100% 比例检查原图。
 - Windows x86-64 单文件 EXE 自动构建
 
-## V0.8.18 响应客户速度预设与迟滞数据导入
+## V0.8.19 双 Y 轴电流响应、客户速度预设与迟滞数据导入
 
 - 自动适配 100% / 150% DPI，工具栏换行，小屏幕可滚动查看完整响应图。
 - 迟滞首图为电流—阻尼力共轴图，纵轴为“压缩<--阻尼力(N)-->复原”。
@@ -60,7 +61,7 @@
 - 主界面“评价设置 → 评价方法”仅保留“窗口均值”和“目标位移穿越插值”，默认使用“窗口均值”；响应时间与迟滞页面继续保留各自的 BMW/Audi 客户规范选择。
 - 窗口基准固定为“总行程全宽”并隐藏该固定控件；窗口比例仍可设置。
 - 迟滞数据可一次选择多个文件，也可选择一个文件夹并递归扫描全部子文件夹中的 `.dat` 文件。
-- 详细使用说明见 [V0.8.18 使用说明](docs/V0.8.18_USER_GUIDE.md)。
+- 详细使用说明见 [V0.8.19 使用说明](docs/V0.8.19_USER_GUIDE.md)。
 
 ## 数据质量原则
 
@@ -83,7 +84,7 @@ pytest -q
 cdc-analyzer-gui
 ```
 
-Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.8.18.exe`。
+Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.8.19.exe`。
 
 ## CLI 示例
 
