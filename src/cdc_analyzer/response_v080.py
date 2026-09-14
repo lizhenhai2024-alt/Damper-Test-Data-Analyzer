@@ -7,7 +7,7 @@ import numpy as np
 
 from . import response_v074 as _v074
 from . import response_v075 as _v075
-from .dynamic_analysis import ResponseAnalysisResult, ResponseConfig, ResponseStandard
+from .dynamic_analysis import CURRENT, TIME, ResponseAnalysisResult, ResponseConfig, ResponseStandard
 from .parser import DataSet
 
 # Corrected BMW response speeds from the current engineering input.
@@ -56,6 +56,67 @@ def parse_target_speeds(value: str | Iterable[float]) -> tuple[float, ...]:
     return tuple(cleaned)
 
 
+def _directed_level_crossings(
+    time_s: np.ndarray,
+    signal: np.ndarray,
+    level: float,
+    direction: float,
+) -> list[float]:
+    """Return linearly interpolated crossings that follow the step direction."""
+    crossings: list[float] = []
+    for left in range(len(time_s) - 1):
+        y0, y1 = float(signal[left]), float(signal[left + 1])
+        if not all(np.isfinite((time_s[left], time_s[left + 1], y0, y1))):
+            continue
+        delta = y1 - y0
+        if delta * direction <= 0 or (y0 - level) * (y1 - level) > 0:
+            continue
+        fraction = (level - y0) / delta
+        if 0 <= fraction <= 1:
+            crossing = float(time_s[left] + fraction * (time_s[left + 1] - time_s[left]))
+            if not crossings or abs(crossing - crossings[-1]) > 1e-12:
+                crossings.append(crossing)
+    return crossings
+
+
+def _add_current_10_90_metrics(result: ResponseAnalysisResult) -> None:
+    """Add fixed I10/I90 current-response intersections to each event."""
+    data = result.processed
+    t = data[TIME].to_numpy(float)
+    current = data[CURRENT].to_numpy(float)
+    records = []
+    for _, row in result.events.iterrows():
+        start = float(row["Current Start A"])
+        end = float(row["Current End A"])
+        delta = end - start
+        segment_mask = (t >= float(row["Segment Start s"])) & (t <= float(row["Segment End s"]))
+        ts, values = t[segment_mask], current[segment_mask]
+        i10 = start + 0.10 * delta
+        i90 = start + 0.90 * delta
+        direction = 1.0 if delta > 0 else -1.0
+        crossings10 = _directed_level_crossings(ts, values, i10, direction)
+        crossings90 = _directed_level_crossings(ts, values, i90, direction)
+        pairs = [(left, right) for left in crossings10 for right in crossings90 if right >= left]
+        if pairs:
+            trigger = float(row["Trigger Crossing Time s"])
+            t10, t90 = min(
+                pairs,
+                key=lambda pair: abs(pair[0] - trigger) + abs(pair[1] - trigger),
+            )
+            elapsed_ms = (t90 - t10) * 1000.0
+        else:
+            t10 = t90 = elapsed_ms = float("nan")
+        records.append((i10, i90, t10, t90, elapsed_ms))
+
+    values = np.asarray(records, dtype=float)
+    result.events["Current 10% A"] = values[:, 0]
+    result.events["Current 90% A"] = values[:, 1]
+    result.events["I10 Crossing Time s"] = values[:, 2]
+    result.events["I90 Crossing Time s"] = values[:, 3]
+    result.events["Current Response I10-I90 ms"] = values[:, 4]
+    result.settings["Current Response Timing"] = "I90% crossing time minus I10% crossing time"
+
+
 def analyze_response_time_v080(
     dataset: DataSet,
     config: ResponseConfig | None = None,
@@ -99,6 +160,7 @@ def analyze_response_time_v080(
         _v074._target_speeds = original_target_selector
 
     _v075._restore_raw_plot_channels(result, raw)
+    _add_current_10_90_metrics(result)
     if config.standard == ResponseStandard.BMW:
         _v075._apply_bmw_current_stage_labels(result)
 

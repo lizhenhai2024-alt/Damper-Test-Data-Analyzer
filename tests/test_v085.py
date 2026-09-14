@@ -209,9 +209,69 @@ def test_current_packaged_gui_is_v085():
     assert "gui_release_v085" in (root / "launcher.py").read_text()
     assert "gui_release_v085:main" in (root / "pyproject.toml").read_text()
     workflow = (root / ".github" / "workflows" / "build-windows.yml").read_text()
-    assert "APP_VERSION: V0.8.18" in workflow
+    assert "APP_VERSION: V0.8.19" in workflow
     assert 'Damper_Test_Data_Analyzer_$env:APP_VERSION' in workflow
     assert "Damper_Test_Data_Analyzer_${{ env.APP_VERSION }}.exe" in workflow
+
+
+def test_dual_axis_current_response_plot_marks_both_signals():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6 import QtCore, QtWidgets
+    from cdc_analyzer.gui_release_v085 import _build_release_gui_classes_v085
+    from test_gui_v083 import _fake_response_result
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = _build_release_gui_classes_v085()()
+    pages = window.dynamic_pages
+    result = _fake_response_result()
+    result.events["I10 Crossing Time s"] = 1.110
+    result.events["I90 Crossing Time s"] = 1.117
+    result.events["Current Response I10-I90 ms"] = 7.0
+    pages.response_result = result
+    pages._rebuild_response_event_combo()
+
+    assert pages.response_plot_mode.count() == 2
+    assert pages.response_plot_mode.currentData() == "stacked"
+    pages.response_plot_mode.setCurrentIndex(
+        pages.response_plot_mode.findData("dual_axis_i10_i90")
+    )
+    pages.refresh_response_plot()
+
+    items = pages.response_dual_items
+    assert len(items["guides"]) == 2
+    assert all(
+        guide.pen.style() == QtCore.Qt.PenStyle.DashLine
+        for guide in items["guides"]
+    )
+    assert len(items["current_points"].points()) == 2
+    assert len(items["force_points"].points()) == 2
+    assert [point.pos().x() for point in items["current_points"].points()] == pytest.approx(
+        [1.110, 1.117]
+    )
+    expected_force = np.interp(
+        [1.110, 1.117],
+        result.processed[TIME],
+        result.processed[LOAD] / 1000.0,
+    )
+    assert [point.pos().y() for point in items["force_points"].points()] == pytest.approx(
+        expected_force
+    )
+    assert items["current_curve"].opts["pen"].color().name() == "#1565c0"
+    assert items["force_curve"].opts["pen"].color().name() == "#c62828"
+    plot = items["plot"]
+    assert plot.getAxis("left").textPen().color().name() == "#1565c0"
+    assert plot.getAxis("right").textPen().color().name() == "#c62828"
+    texts = [label.toPlainText() for label in items["labels"]]
+    assert "I₁₀%" in texts
+    assert "I₉₀%" in texts
+    assert any(text.startswith("F(I₁₀%) =") for text in texts)
+    assert any(text.startswith("F(I₉₀%) =") for text in texts)
+    assert "Δt(I₁₀%→I₉₀%) = 7.00 ms" in texts
+    assert all(not label.textItem.font().bold() for label in items["labels"])
+    assert all(label.fill.style().value == 0 for label in items["labels"])
+
+    window.close()
+    app.processEvents()
 
 
 def test_response_threshold_labels_follow_settings_and_visibility():

@@ -25,6 +25,8 @@ def discover_hysteresis_dat_files(folder: str | Path) -> list[Path]:
 
 class DynamicPagesController(_BaseController):
     _SUBSCRIPT_TRANSLATION = str.maketrans("0123456789-", "₀₁₂₃₄₅₆₇₈₉₋")
+    _CURRENT_COLOR = "#1565c0"
+    _FORCE_COLOR = "#c62828"
 
     @classmethod
     def _threshold_label(cls, symbol: str, fraction: float) -> str:
@@ -56,6 +58,12 @@ class DynamicPagesController(_BaseController):
         self.response_force_start_fraction.editingFinished.connect(
             self._reanalyze_response_threshold
         )
+
+        self.response_plot_mode_label = QtWidgets.QLabel()
+        self.response_plot_mode = QtWidgets.QComboBox()
+        self.response_plot_mode.addItem("", "stacked")
+        self.response_plot_mode.addItem("", "dual_axis_i10_i90")
+        self.response_plot_mode.currentIndexChanged.connect(self.refresh_response_plot)
 
         insert_at = controls.indexOf(self.response_trigger) + 1
         for widget in (
@@ -138,6 +146,7 @@ class DynamicPagesController(_BaseController):
             [self.response_force_start_label, self.response_force_start_fraction],
             [self.response_show_f1, self.response_show_f63],
             [self.response_limit_label, self.response_t90_limit],
+            [self.response_plot_mode_label, self.response_plot_mode],
             [self.response_analyze_button],
         ], self.response_file_label, self.response_status)
         self.response_target_speeds.setMinimumWidth(160)
@@ -200,6 +209,9 @@ class DynamicPagesController(_BaseController):
         self.speed_tolerance_label.setText(self._text("速度分组容差", "Speed grouping tolerance"))
         self.hysteresis_multi_file_button.setText(self._text("加载多速度迟滞数据…", "Load multi-speed hysteresis data…"))
         self.hysteresis_folder_button.setText(self._text("扫描迟滞数据文件夹…", "Scan hysteresis data folder…"))
+        self.response_plot_mode_label.setText(self._text("响应图", "Response plot"))
+        self.response_plot_mode.setItemText(0, self._text("三联响应图", "Three-panel response"))
+        self.response_plot_mode.setItemText(1, self._text("双Y轴 I₁₀%—I₉₀%", "Dual-axis I₁₀%–I₉₀%"))
         self._update_response_threshold_texts()
         self._update_shared_source_labels()
         self.hysteresis_view_tabs.setTabText(0, self._text("图形分析", "Plot Analysis"))
@@ -225,6 +237,7 @@ class DynamicPagesController(_BaseController):
             ))
 
     def refresh_response_plot(self):
+        self._clear_response_dual_axis()
         for manager in getattr(self, "response_annotations", []):
             manager.plot.vb.sigResized.disconnect(manager.update)
             manager.plot.vb.sigRangeChanged.disconnect(manager.update)
@@ -251,6 +264,9 @@ class DynamicPagesController(_BaseController):
         force_start_label = self._threshold_label("F", force_start_fraction)
         time_start_label = self._threshold_label("t", force_start_fraction)
         foreground = getattr(self.window, "_plot_foreground_color", "#202020")
+        if getattr(self, "response_plot_mode", None) is not None and self.response_plot_mode.currentData() == "dual_axis_i10_i90":
+            self._refresh_response_dual_axis(row, data, t, foreground)
+            return
         current = self.response_plot_area.addPlot(row=0, col=0)
         force = self.response_plot_area.addPlot(row=1, col=0)
         velocity = self.response_plot_area.addPlot(row=2, col=0)
@@ -323,6 +339,173 @@ class DynamicPagesController(_BaseController):
         current.setXRange(float(t[0]), float(t[-1]), padding=0.04)
         for annotations in self.response_annotations:
             annotations.update()
+
+    def _clear_response_dual_axis(self):
+        state = getattr(self, "response_dual_axis", None)
+        if state is None:
+            return
+        plot, force_view, update_views = state
+        try:
+            plot.vb.sigResized.disconnect(update_views)
+        except (RuntimeError, TypeError):
+            pass
+        try:
+            scene = force_view.scene()
+            if scene is not None:
+                scene.removeItem(force_view)
+        except RuntimeError:
+            pass
+        self.response_dual_axis = None
+        self.response_dual_items = {}
+
+    def _refresh_response_dual_axis(self, row, data, t, foreground):
+        current_values = data[CURRENT].to_numpy(float)
+        force_values = data[LOAD].to_numpy(float) / 1000.0
+        plot = self.response_plot_area.addPlot(row=0, col=0)
+        self._axis_style(plot, self._text("阀电流", "Valve current"), "A")
+        plot.setLabel("bottom", self._text("时间", "Time"), units="s", **{"font-size": "10pt"})
+        plot.showGrid(x=True, y=True, alpha=0.15)
+        plot.setTitle(
+            self._text("电流 I₁₀%—I₉₀% 响应", "Current I₁₀%–I₉₀% response")
+            + " | " + self._localized_stage(row.get("Stage", ""))
+            + " | " + self._localized_direction(row.get("Direction", "")),
+            size="10pt",
+        )
+
+        current_pen = self.pg.mkPen(self._CURRENT_COLOR, width=1.8)
+        force_pen = self.pg.mkPen(self._FORCE_COLOR, width=1.8)
+        current_curve = plot.plot(t, current_values, pen=current_pen)
+        left_axis = plot.getAxis("left")
+        left_axis.setLabel(
+            self._text("阀电流", "Valve current"),
+            units="A",
+            color=self._CURRENT_COLOR,
+            **{"font-size": "10pt", "font-weight": "normal"},
+        )
+        left_axis.label.setFont(self._font())
+        left_axis.setPen(current_pen)
+        left_axis.setTextPen(current_pen)
+
+        plot.showAxis("right")
+        force_view = self.pg.ViewBox()
+        plot.scene().addItem(force_view)
+        right_axis = plot.getAxis("right")
+        right_axis.linkToView(force_view)
+        right_axis.setGrid(False)
+        force_view.setXLink(plot)
+        right_axis.setLabel(
+            self._text("阻尼力", "Damping force"),
+            units="kN",
+            color=self._FORCE_COLOR,
+            **{"font-size": "10pt", "font-weight": "normal"},
+        )
+        right_axis.label.setFont(self._font())
+        right_axis.setStyle(tickFont=self._font())
+        right_axis.enableAutoSIPrefix(False)
+        right_axis.setPen(force_pen)
+        right_axis.setTextPen(force_pen)
+        force_curve = self.pg.PlotCurveItem(t, force_values, pen=force_pen)
+        force_view.addItem(force_curve)
+
+        def update_views():
+            force_view.setGeometry(plot.vb.sceneBoundingRect())
+            force_view.linkedViewChanged(plot.vb, force_view.XAxis)
+
+        update_views()
+        plot.vb.sigResized.connect(update_views)
+        self.response_dual_axis = (plot, force_view, update_views)
+
+        current_span = max(float(np.ptp(current_values)), 0.02)
+        force_span = max(float(np.ptp(force_values)), 0.02)
+        plot.setYRange(
+            float(np.min(current_values)) - 0.24 * current_span,
+            float(np.max(current_values)) + 0.34 * current_span,
+            padding=0,
+        )
+        force_view.setYRange(
+            float(np.min(force_values)) - 0.24 * force_span,
+            float(np.max(force_values)) + 0.30 * force_span,
+            padding=0,
+        )
+        plot.setXRange(float(t[0]), float(t[-1]), padding=0.04)
+
+        t10 = float(row.get("I10 Crossing Time s", np.nan))
+        t90 = float(row.get("I90 Crossing Time s", np.nan))
+        elapsed = float(row.get("Current Response I10-I90 ms", np.nan))
+        valid_crossings = np.isfinite([t10, t90, elapsed]).all()
+        guides = []
+        current_points = None
+        force_points = None
+        labels = []
+        if valid_crossings and t[0] <= t10 <= t90 <= t[-1]:
+            guide_pen = self.pg.mkPen(foreground, width=0.8, style=QtCore.Qt.PenStyle.DashLine)
+            for crossing in (t10, t90):
+                guide = self.pg.InfiniteLine(pos=crossing, angle=90, pen=guide_pen)
+                guide.setZValue(5)
+                plot.addItem(guide, ignoreBounds=True)
+                guides.append(guide)
+
+            current_y = np.interp([t10, t90], t, current_values)
+            force_y = np.interp([t10, t90], t, force_values)
+            current_points = self.pg.ScatterPlotItem(
+                [t10, t90], current_y, symbol="o", size=8,
+                pen=self.pg.mkPen(self._CURRENT_COLOR), brush=self.pg.mkBrush(self._CURRENT_COLOR), pxMode=True,
+            )
+            force_points = self.pg.ScatterPlotItem(
+                [t10, t90], force_y, symbol="o", size=8,
+                pen=self.pg.mkPen(self._FORCE_COLOR), brush=self.pg.mkBrush(self._FORCE_COLOR), pxMode=True,
+            )
+            current_points.setZValue(10)
+            force_points.setZValue(10)
+            plot.addItem(current_points, ignoreBounds=True)
+            force_view.addItem(force_points, ignoreBounds=True)
+
+            for text, x, y, anchor in (
+                ("I₁₀%", t10, current_y[0], (1.0, 1.0)),
+                ("I₉₀%", t90, current_y[1], (0.0, 0.0)),
+            ):
+                label = self.pg.TextItem(text=text, color=self._CURRENT_COLOR, anchor=anchor)
+                label.setFont(self._font())
+                label.setPos(float(x), float(y))
+                label.setZValue(20)
+                plot.addItem(label, ignoreBounds=True)
+                labels.append(label)
+
+            for text, x, y, anchor in (
+                (f"F(I₁₀%) = {force_y[0]:.3g} kN", t10, force_y[0], (1.0, 0.0)),
+                (f"F(I₉₀%) = {force_y[1]:.3g} kN", t90, force_y[1], (0.0, 1.0)),
+            ):
+                label = self.pg.TextItem(text=text, color=self._FORCE_COLOR, anchor=anchor)
+                label.setFont(self._font())
+                label.setPos(float(x), float(y))
+                label.setZValue(20)
+                force_view.addItem(label, ignoreBounds=True)
+                labels.append(label)
+
+            delta_label = self.pg.TextItem(
+                text=f"Δt(I₁₀%→I₉₀%) = {elapsed:.2f} ms",
+                color=self._CURRENT_COLOR,
+                anchor=(0.5, 1.0),
+            )
+            delta_label.setFont(self._font())
+            delta_label.setPos(float((t10 + t90) / 2), float(np.max(current_values) + 0.24 * current_span))
+            delta_label.setZValue(20)
+            plot.addItem(delta_label, ignoreBounds=True)
+            labels.append(delta_label)
+
+        legend = plot.addLegend(offset=(10, 10), labelTextSize="10pt")
+        legend.addItem(current_curve, self._text("电流", "Current"))
+        legend.addItem(force_curve, self._text("阻尼力", "Damping force"))
+        self.response_dual_items = {
+            "plot": plot,
+            "force_view": force_view,
+            "current_curve": current_curve,
+            "force_curve": force_curve,
+            "guides": guides,
+            "current_points": current_points,
+            "force_points": force_points,
+            "labels": labels,
+        }
 
     def analyze_hysteresis(self):
         previous = _base.analyze_hysteresis
