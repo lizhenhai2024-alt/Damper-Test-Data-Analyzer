@@ -445,10 +445,10 @@ class DynamicPagesController(_BaseController):
                 plot.addItem(guide, ignoreBounds=True)
                 guides.append(guide)
 
-            current_y = np.interp([t10, force_t90], t, current_values)
+            current_y = float(np.interp(t10, t, current_values))
             force_y = np.interp([t10, force_t90], t, force_values)
             current_points = self.pg.ScatterPlotItem(
-                [t10, force_t90], current_y, symbol="o", size=8,
+                [t10], [current_y], symbol="o", size=8,
                 pen=self.pg.mkPen(self._CURRENT_COLOR), brush=self.pg.mkBrush(self._CURRENT_COLOR), pxMode=True,
             )
             force_points = self.pg.ScatterPlotItem(
@@ -460,16 +460,14 @@ class DynamicPagesController(_BaseController):
             plot.addItem(current_points, ignoreBounds=True)
             force_view.addItem(force_points, ignoreBounds=True)
 
-            for text, x, y, anchor in (
-                ("I₁₀%", t10, current_y[0], (1.0, 1.0)),
-                (f"I(F₉₀%) = {current_y[1]:.3g} A", force_t90, current_y[1], (0.0, 0.0)),
-            ):
-                label = self.pg.TextItem(text=text, color=self._CURRENT_COLOR, anchor=anchor)
-                label.setFont(self._font())
-                label.setPos(float(x), float(y))
-                label.setZValue(20)
-                plot.addItem(label, ignoreBounds=True)
-                labels.append(label)
+            current_label = self.pg.TextItem(
+                text="I₁₀%", color=self._CURRENT_COLOR, anchor=(1.0, 1.0)
+            )
+            current_label.setFont(self._font())
+            current_label.setPos(float(t10), current_y)
+            current_label.setZValue(20)
+            plot.addItem(current_label, ignoreBounds=True)
+            labels.append(current_label)
 
             for text, x, y, anchor in (
                 (f"F(I₁₀%) = {force_y[0]:.3g} kN", t10, force_y[0], (1.0, 0.0)),

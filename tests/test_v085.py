@@ -209,7 +209,7 @@ def test_current_packaged_gui_is_v085():
     assert "gui_release_v085" in (root / "launcher.py").read_text()
     assert "gui_release_v085:main" in (root / "pyproject.toml").read_text()
     workflow = (root / ".github" / "workflows" / "build-windows.yml").read_text()
-    assert "APP_VERSION: V0.8.20" in workflow
+    assert "APP_VERSION: V0.8.21" in workflow
     assert 'Damper_Test_Data_Analyzer_$env:APP_VERSION' in workflow
     assert "Damper_Test_Data_Analyzer_${{ env.APP_VERSION }}.exe" in workflow
 
@@ -245,10 +245,10 @@ def test_dual_axis_current_response_plot_marks_both_signals():
         guide.pen.style() == QtCore.Qt.PenStyle.DashLine
         for guide in items["guides"]
     )
-    assert len(items["current_points"].points()) == 2
+    assert len(items["current_points"].points()) == 1
     assert len(items["force_points"].points()) == 2
     assert [point.pos().x() for point in items["current_points"].points()] == pytest.approx(
-        [1.110, 1.130]
+        [1.110]
     )
     expected_force = np.interp(
         [1.110, 1.130],
@@ -265,7 +265,7 @@ def test_dual_axis_current_response_plot_marks_both_signals():
     assert plot.getAxis("right").textPen().color().name() == "#c62828"
     texts = [label.toPlainText() for label in items["labels"]]
     assert "I₁₀%" in texts
-    assert any(text.startswith("I(F₉₀%) =") for text in texts)
+    assert not any(text.startswith("I(F₉₀%) =") for text in texts)
     assert any(text.startswith("F(I₁₀%) =") for text in texts)
     assert any(text.startswith("F₉₀% =") for text in texts)
     assert "t₉₀% = t(F₉₀%) − t(I₁₀%) = 20.00 ms" in texts
