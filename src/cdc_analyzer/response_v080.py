@@ -13,11 +13,23 @@ from .parser import DataSet
 # Corrected BMW response speeds from the current engineering input.
 BMW_TARGET_SPEEDS_MPS = (0.131, 0.524, 1.048)
 AUDI_TARGET_SPEEDS_MPS = (0.052, 0.131, 0.262, 0.524)
+HONGQI_TARGET_SPEEDS_MPS = (0.131, 0.262, 0.524, 1.047)
+DOMESTIC_OEM_TARGET_SPEEDS_MPS = (0.1, 0.3, 0.6)
+LEAPMOTOR_TARGET_SPEEDS_MPS = (0.15, 0.70)
 DEFAULT_TARGET_SPEED_TOLERANCE = _v074.DEFAULT_TARGET_SPEED_TOLERANCE
 
 
+TARGET_SPEED_PRESETS = {
+    ResponseStandard.BMW: BMW_TARGET_SPEEDS_MPS,
+    ResponseStandard.AUDI: AUDI_TARGET_SPEEDS_MPS,
+    ResponseStandard.HONGQI: HONGQI_TARGET_SPEEDS_MPS,
+    ResponseStandard.DOMESTIC_OEM: DOMESTIC_OEM_TARGET_SPEEDS_MPS,
+    ResponseStandard.LEAPMOTOR: LEAPMOTOR_TARGET_SPEEDS_MPS,
+}
+
+
 def default_target_speeds(standard: ResponseStandard) -> tuple[float, ...]:
-    return BMW_TARGET_SPEEDS_MPS if standard == ResponseStandard.BMW else AUDI_TARGET_SPEEDS_MPS
+    return TARGET_SPEED_PRESETS[ResponseStandard(standard)]
 
 
 def parse_target_speeds(value: str | Iterable[float]) -> tuple[float, ...]:

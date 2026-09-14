@@ -21,6 +21,9 @@ VELOCITY = "Velocity m/s"
 class ResponseStandard(str, Enum):
     AUDI = "audi"
     BMW = "bmw"
+    HONGQI = "hongqi"
+    DOMESTIC_OEM = "domestic_oem"
+    LEAPMOTOR = "leapmotor"
 
 
 class HysteresisStandard(str, Enum):

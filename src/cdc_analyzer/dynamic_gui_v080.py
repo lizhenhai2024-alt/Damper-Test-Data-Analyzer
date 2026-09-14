@@ -13,13 +13,22 @@ from .response_v080 import (
 class DynamicPagesController(_V079DynamicPagesController):
     """V0.8.0 response target-speed configuration.
 
-    OEM profile and test speed are deliberately separated. BMW/Audi populate
-    convenient default speeds, but the operator may enter any positive customer
-    speed list (for example 0.1, 0.3, 0.6, 1.0 m/s).
+    Customer profile and test speed are deliberately separated. Each profile
+    populates convenient default speeds, but the operator may enter any positive
+    customer speed list (for example 0.1, 0.3, 0.6, 1.0 m/s).
     """
 
     def _build_response_page(self):
         super()._build_response_page()
+
+        for standard, zh_label, en_label in (
+            (ResponseStandard.HONGQI, "红旗", "Hongqi"),
+            (ResponseStandard.DOMESTIC_OEM, "国内主机", "Domestic OEM"),
+            (ResponseStandard.LEAPMOTOR, "零跑", "Leapmotor"),
+        ):
+            self.response_standard.addItem(
+                self._text(zh_label, en_label), standard.value
+            )
 
         controls = self.response_page.layout().itemAt(0).layout()
         self.response_target_speed_label = self.QtWidgets.QLabel()
@@ -48,13 +57,23 @@ class DynamicPagesController(_V079DynamicPagesController):
     def _reset_target_speeds_for_standard(self, *_args):
         if not hasattr(self, "response_target_speeds"):
             return
-        self.response_target_speeds.setText(
-            self._format_speed_list(default_target_speeds(self._current_standard()))
-        )
+        standard = self._current_standard()
+        text = self._format_speed_list(default_target_speeds(standard))
+        if standard == ResponseStandard.LEAPMOTOR:
+            text = "0.15, 0.70"
+        self.response_target_speeds.setText(text)
 
     def _apply_target_speed_text(self):
         if not hasattr(self, "response_target_speed_label"):
             return
+        for standard, zh_label, en_label in (
+            (ResponseStandard.HONGQI, "红旗", "Hongqi"),
+            (ResponseStandard.DOMESTIC_OEM, "国内主机", "Domestic OEM"),
+            (ResponseStandard.LEAPMOTOR, "零跑", "Leapmotor"),
+        ):
+            index = self.response_standard.findData(standard.value)
+            if index >= 0:
+                self.response_standard.setItemText(index, self._text(zh_label, en_label))
         self.response_target_speed_label.setText(
             self._text("目标速度", "Target speed")
         )
@@ -66,8 +85,8 @@ class DynamicPagesController(_V079DynamicPagesController):
         )
         self.response_target_speeds.setToolTip(
             self._text(
-                "可输入任意客户目标速度，单位 m/s；多个速度用逗号分隔。BMW 默认 0.131, 0.524, 1.048。",
-                "Enter any customer target speeds in m/s, separated by commas. BMW defaults: 0.131, 0.524, 1.048.",
+                "可输入任意客户目标速度，单位 m/s；多个速度用逗号分隔。选择规范时自动载入该客户预设速度。",
+                "Enter any customer target speeds in m/s, separated by commas. Selecting a profile loads its speed preset.",
             )
         )
 
