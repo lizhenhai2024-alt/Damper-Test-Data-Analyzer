@@ -129,6 +129,12 @@ def test_current_i10_i90_response_uses_interpolated_crossings():
     assert result.settings["Current Response Timing"] == (
         "I90% crossing time minus I10% crossing time"
     )
+    assert row["Damping Response I10-F90 ms"] == pytest.approx(
+        (row["F90 Crossing Time s"] - row["I10 Crossing Time s"]) * 1000.0
+    )
+    assert result.settings["Dual-axis Response Timing"] == (
+        "F90% force crossing time minus I10% current crossing time"
+    )
 
 
 def test_current_i10_i90_response_supports_falling_current_step():

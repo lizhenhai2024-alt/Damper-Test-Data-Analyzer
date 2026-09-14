@@ -106,7 +106,13 @@ def _add_current_10_90_metrics(result: ResponseAnalysisResult) -> None:
             elapsed_ms = (t90 - t10) * 1000.0
         else:
             t10 = t90 = elapsed_ms = float("nan")
-        records.append((i10, i90, t10, t90, elapsed_ms))
+        force_t90 = float(row.get("F90 Crossing Time s", np.nan))
+        force_response_ms = (
+            (force_t90 - t10) * 1000.0
+            if np.isfinite(t10) and np.isfinite(force_t90)
+            else float("nan")
+        )
+        records.append((i10, i90, t10, t90, elapsed_ms, force_response_ms))
 
     values = np.asarray(records, dtype=float)
     result.events["Current 10% A"] = values[:, 0]
@@ -114,7 +120,9 @@ def _add_current_10_90_metrics(result: ResponseAnalysisResult) -> None:
     result.events["I10 Crossing Time s"] = values[:, 2]
     result.events["I90 Crossing Time s"] = values[:, 3]
     result.events["Current Response I10-I90 ms"] = values[:, 4]
+    result.events["Damping Response I10-F90 ms"] = values[:, 5]
     result.settings["Current Response Timing"] = "I90% crossing time minus I10% crossing time"
+    result.settings["Dual-axis Response Timing"] = "F90% force crossing time minus I10% current crossing time"
 
 
 def analyze_response_time_v080(

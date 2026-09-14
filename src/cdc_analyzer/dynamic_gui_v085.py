@@ -62,7 +62,7 @@ class DynamicPagesController(_BaseController):
         self.response_plot_mode_label = QtWidgets.QLabel()
         self.response_plot_mode = QtWidgets.QComboBox()
         self.response_plot_mode.addItem("", "stacked")
-        self.response_plot_mode.addItem("", "dual_axis_i10_i90")
+        self.response_plot_mode.addItem("", "dual_axis_i10_f90")
         self.response_plot_mode.currentIndexChanged.connect(self.refresh_response_plot)
 
         insert_at = controls.indexOf(self.response_trigger) + 1
@@ -211,7 +211,7 @@ class DynamicPagesController(_BaseController):
         self.hysteresis_folder_button.setText(self._text("扫描迟滞数据文件夹…", "Scan hysteresis data folder…"))
         self.response_plot_mode_label.setText(self._text("响应图", "Response plot"))
         self.response_plot_mode.setItemText(0, self._text("三联响应图", "Three-panel response"))
-        self.response_plot_mode.setItemText(1, self._text("双Y轴 I₁₀%—I₉₀%", "Dual-axis I₁₀%–I₉₀%"))
+        self.response_plot_mode.setItemText(1, self._text("双Y轴 I₁₀%→F₉₀%", "Dual-axis I₁₀%→F₉₀%"))
         self._update_response_threshold_texts()
         self._update_shared_source_labels()
         self.hysteresis_view_tabs.setTabText(0, self._text("图形分析", "Plot Analysis"))
@@ -264,7 +264,7 @@ class DynamicPagesController(_BaseController):
         force_start_label = self._threshold_label("F", force_start_fraction)
         time_start_label = self._threshold_label("t", force_start_fraction)
         foreground = getattr(self.window, "_plot_foreground_color", "#202020")
-        if getattr(self, "response_plot_mode", None) is not None and self.response_plot_mode.currentData() == "dual_axis_i10_i90":
+        if getattr(self, "response_plot_mode", None) is not None and self.response_plot_mode.currentData() == "dual_axis_i10_f90":
             self._refresh_response_dual_axis(row, data, t, foreground)
             return
         current = self.response_plot_area.addPlot(row=0, col=0)
@@ -366,7 +366,7 @@ class DynamicPagesController(_BaseController):
         plot.setLabel("bottom", self._text("时间", "Time"), units="s", **{"font-size": "10pt"})
         plot.showGrid(x=True, y=True, alpha=0.15)
         plot.setTitle(
-            self._text("电流 I₁₀%—I₉₀% 响应", "Current I₁₀%–I₉₀% response")
+            self._text("电流触发—阻尼力 F₉₀% 响应", "Current trigger–force F₉₀% response")
             + " | " + self._localized_stage(row.get("Stage", ""))
             + " | " + self._localized_direction(row.get("Direction", "")),
             size="10pt",
@@ -430,29 +430,29 @@ class DynamicPagesController(_BaseController):
         plot.setXRange(float(t[0]), float(t[-1]), padding=0.04)
 
         t10 = float(row.get("I10 Crossing Time s", np.nan))
-        t90 = float(row.get("I90 Crossing Time s", np.nan))
-        elapsed = float(row.get("Current Response I10-I90 ms", np.nan))
-        valid_crossings = np.isfinite([t10, t90, elapsed]).all()
+        force_t90 = float(row.get("F90 Crossing Time s", np.nan))
+        elapsed = float(row.get("Damping Response I10-F90 ms", np.nan))
+        valid_crossings = np.isfinite([t10, force_t90, elapsed]).all()
         guides = []
         current_points = None
         force_points = None
         labels = []
-        if valid_crossings and t[0] <= t10 <= t90 <= t[-1]:
+        if valid_crossings and t[0] <= t10 <= force_t90 <= t[-1]:
             guide_pen = self.pg.mkPen(foreground, width=0.8, style=QtCore.Qt.PenStyle.DashLine)
-            for crossing in (t10, t90):
+            for crossing in (t10, force_t90):
                 guide = self.pg.InfiniteLine(pos=crossing, angle=90, pen=guide_pen)
                 guide.setZValue(5)
                 plot.addItem(guide, ignoreBounds=True)
                 guides.append(guide)
 
-            current_y = np.interp([t10, t90], t, current_values)
-            force_y = np.interp([t10, t90], t, force_values)
+            current_y = np.interp([t10, force_t90], t, current_values)
+            force_y = np.interp([t10, force_t90], t, force_values)
             current_points = self.pg.ScatterPlotItem(
-                [t10, t90], current_y, symbol="o", size=8,
+                [t10, force_t90], current_y, symbol="o", size=8,
                 pen=self.pg.mkPen(self._CURRENT_COLOR), brush=self.pg.mkBrush(self._CURRENT_COLOR), pxMode=True,
             )
             force_points = self.pg.ScatterPlotItem(
-                [t10, t90], force_y, symbol="o", size=8,
+                [t10, force_t90], force_y, symbol="o", size=8,
                 pen=self.pg.mkPen(self._FORCE_COLOR), brush=self.pg.mkBrush(self._FORCE_COLOR), pxMode=True,
             )
             current_points.setZValue(10)
@@ -462,7 +462,7 @@ class DynamicPagesController(_BaseController):
 
             for text, x, y, anchor in (
                 ("I₁₀%", t10, current_y[0], (1.0, 1.0)),
-                ("I₉₀%", t90, current_y[1], (0.0, 0.0)),
+                (f"I(F₉₀%) = {current_y[1]:.3g} A", force_t90, current_y[1], (0.0, 0.0)),
             ):
                 label = self.pg.TextItem(text=text, color=self._CURRENT_COLOR, anchor=anchor)
                 label.setFont(self._font())
@@ -473,7 +473,7 @@ class DynamicPagesController(_BaseController):
 
             for text, x, y, anchor in (
                 (f"F(I₁₀%) = {force_y[0]:.3g} kN", t10, force_y[0], (1.0, 0.0)),
-                (f"F(I₉₀%) = {force_y[1]:.3g} kN", t90, force_y[1], (0.0, 1.0)),
+                (f"F₉₀% = {force_y[1]:.3g} kN", force_t90, force_y[1], (0.0, 1.0)),
             ):
                 label = self.pg.TextItem(text=text, color=self._FORCE_COLOR, anchor=anchor)
                 label.setFont(self._font())
@@ -483,12 +483,12 @@ class DynamicPagesController(_BaseController):
                 labels.append(label)
 
             delta_label = self.pg.TextItem(
-                text=f"Δt(I₁₀%→I₉₀%) = {elapsed:.2f} ms",
+                text=f"t₉₀% = t(F₉₀%) − t(I₁₀%) = {elapsed:.2f} ms",
                 color=self._CURRENT_COLOR,
                 anchor=(0.5, 1.0),
             )
             delta_label.setFont(self._font())
-            delta_label.setPos(float((t10 + t90) / 2), float(np.max(current_values) + 0.24 * current_span))
+            delta_label.setPos(float((t10 + force_t90) / 2), float(np.max(current_values) + 0.24 * current_span))
             delta_label.setZValue(20)
             plot.addItem(delta_label, ignoreBounds=True)
             labels.append(delta_label)
