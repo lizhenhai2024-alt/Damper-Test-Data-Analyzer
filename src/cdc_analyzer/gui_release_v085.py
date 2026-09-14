@@ -32,9 +32,9 @@ def _build_release_gui_classes_v085():
                 (
                     "Damper Test Data Analyzer\n"
                     "减振器 / CDC 试验数据分析工具\n"
-                    "V0.8.17"
+                    "V0.8.18"
                     if self.language == "zh_CN"
-                    else "Damper Test Data Analyzer\nDamper / CDC test-data analysis\nV0.8.17"
+                    else "Damper Test Data Analyzer\nDamper / CDC test-data analysis\nV0.8.18"
                 ),
             )
 

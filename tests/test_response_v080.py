@@ -10,8 +10,12 @@ import pytest
 from cdc_analyzer.dynamic_analysis import CURRENT, DISP, LOAD, TIME, ResponseConfig, ResponseStandard
 from cdc_analyzer.parser import DataSet
 from cdc_analyzer.response_v080 import (
+    DOMESTIC_OEM_TARGET_SPEEDS_MPS,
+    HONGQI_TARGET_SPEEDS_MPS,
+    LEAPMOTOR_TARGET_SPEEDS_MPS,
     BMW_TARGET_SPEEDS_MPS,
     analyze_response_time_v080,
+    default_target_speeds,
     parse_target_speeds,
 )
 
@@ -46,6 +50,29 @@ def test_bmw_default_response_speed_is_0131_not_00131():
     )
     assert not result.events.empty
     assert float(result.events.iloc[0]["Target Velocity m/s"]) == pytest.approx(0.131)
+
+
+@pytest.mark.parametrize(
+    ("standard", "expected"),
+    [
+        (ResponseStandard.HONGQI, (0.131, 0.262, 0.524, 1.047)),
+        (ResponseStandard.DOMESTIC_OEM, (0.1, 0.3, 0.6)),
+        (ResponseStandard.LEAPMOTOR, (0.15, 0.70)),
+    ],
+)
+def test_customer_response_speed_presets(standard, expected):
+    assert default_target_speeds(standard) == pytest.approx(expected)
+    result = analyze_response_time_v080(
+        _response_dataset(expected[0]),
+        ResponseConfig(standard=standard),
+    )
+    assert float(result.events.iloc[0]["Target Velocity m/s"]) == pytest.approx(expected[0])
+
+
+def test_named_customer_speed_constants_are_exact():
+    assert HONGQI_TARGET_SPEEDS_MPS == (0.131, 0.262, 0.524, 1.047)
+    assert DOMESTIC_OEM_TARGET_SPEEDS_MPS == (0.1, 0.3, 0.6)
+    assert LEAPMOTOR_TARGET_SPEEDS_MPS == (0.15, 0.70)
 
 
 def test_custom_customer_target_speed_is_not_locked_to_oem_profile():
@@ -132,6 +159,16 @@ def test_v080_gui_exposes_editable_target_speed_list():
 
     assert pages.response_target_speeds.isVisibleTo(pages.response_page)
     assert pages.response_target_speeds.text() == "0.131, 0.524, 1.048"
+    presets = {
+        "hongqi": ("红旗", "0.131, 0.262, 0.524, 1.047"),
+        "domestic_oem": ("国内主机", "0.1, 0.3, 0.6"),
+        "leapmotor": ("零跑", "0.15, 0.70"),
+    }
+    for standard, (label, expected) in presets.items():
+        index = pages.response_standard.findData(standard)
+        assert pages.response_standard.itemText(index) == label
+        pages.response_standard.setCurrentIndex(index)
+        assert pages.response_target_speeds.text() == expected
     pages.response_target_speeds.setText("0.1, 0.3, 0.6, 1.0")
     assert parse_target_speeds(pages.response_target_speeds.text()) == pytest.approx((0.1, 0.3, 0.6, 1.0))
 
