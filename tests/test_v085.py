@@ -209,7 +209,7 @@ def test_current_packaged_gui_is_v085():
     assert "gui_release_v085" in (root / "launcher.py").read_text()
     assert "gui_release_v085:main" in (root / "pyproject.toml").read_text()
     workflow = (root / ".github" / "workflows" / "build-windows.yml").read_text()
-    assert "APP_VERSION: V0.8.19" in workflow
+    assert "APP_VERSION: V0.8.20" in workflow
     assert 'Damper_Test_Data_Analyzer_$env:APP_VERSION' in workflow
     assert "Damper_Test_Data_Analyzer_${{ env.APP_VERSION }}.exe" in workflow
 
@@ -227,13 +227,15 @@ def test_dual_axis_current_response_plot_marks_both_signals():
     result.events["I10 Crossing Time s"] = 1.110
     result.events["I90 Crossing Time s"] = 1.117
     result.events["Current Response I10-I90 ms"] = 7.0
+    result.events["F90 Crossing Time s"] = 1.130
+    result.events["Damping Response I10-F90 ms"] = 20.0
     pages.response_result = result
     pages._rebuild_response_event_combo()
 
     assert pages.response_plot_mode.count() == 2
     assert pages.response_plot_mode.currentData() == "stacked"
     pages.response_plot_mode.setCurrentIndex(
-        pages.response_plot_mode.findData("dual_axis_i10_i90")
+        pages.response_plot_mode.findData("dual_axis_i10_f90")
     )
     pages.refresh_response_plot()
 
@@ -246,10 +248,10 @@ def test_dual_axis_current_response_plot_marks_both_signals():
     assert len(items["current_points"].points()) == 2
     assert len(items["force_points"].points()) == 2
     assert [point.pos().x() for point in items["current_points"].points()] == pytest.approx(
-        [1.110, 1.117]
+        [1.110, 1.130]
     )
     expected_force = np.interp(
-        [1.110, 1.117],
+        [1.110, 1.130],
         result.processed[TIME],
         result.processed[LOAD] / 1000.0,
     )
@@ -263,10 +265,10 @@ def test_dual_axis_current_response_plot_marks_both_signals():
     assert plot.getAxis("right").textPen().color().name() == "#c62828"
     texts = [label.toPlainText() for label in items["labels"]]
     assert "I₁₀%" in texts
-    assert "I₉₀%" in texts
+    assert any(text.startswith("I(F₉₀%) =") for text in texts)
     assert any(text.startswith("F(I₁₀%) =") for text in texts)
-    assert any(text.startswith("F(I₉₀%) =") for text in texts)
-    assert "Δt(I₁₀%→I₉₀%) = 7.00 ms" in texts
+    assert any(text.startswith("F₉₀% =") for text in texts)
+    assert "t₉₀% = t(F₉₀%) − t(I₁₀%) = 20.00 ms" in texts
     assert all(not label.textItem.font().bold() for label in items["labels"])
     assert all(label.fill.style().value == 0 for label in items["labels"])
 
