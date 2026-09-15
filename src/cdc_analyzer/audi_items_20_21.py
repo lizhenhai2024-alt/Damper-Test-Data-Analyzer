@@ -388,19 +388,30 @@ def _evaluate_run(path: Path, format_name: str, current_a: float, run_index: int
     }
 
 
-def inspect_map_file(path: str | Path) -> ImportedMapFile:
+MAX_MAP_SPEED_MPS = 1.047
+
+
+def _is_valid_map_speed(speed: float, max_speed_mps: float = MAX_MAP_SPEED_MPS) -> bool:
+    """Return whether a parsed run is a supported physical test speed."""
+    return bool(np.isfinite(speed) and 0.0 < speed <= max_speed_mps * 1.001)
+
+
+def inspect_map_file(path: str | Path, max_speed_mps: float = MAX_MAP_SPEED_MPS) -> ImportedMapFile:
     path = Path(path)
     current = current_from_filename(path)
     suffix = path.suffix.lower()
     runs = _parse_pvp(path, current) if suffix == ".pvp" else _parse_dctw(path, current) if suffix == ".dctw" else None
     if runs is None:
         raise ValueError(f"Unsupported map file: {suffix}")
-    return ImportedMapFile(path, current, suffix[1:].upper(), len(runs), tuple(float(run[0]) for run in runs))
+    valid_speeds = tuple(float(run[0]) for run in runs if _is_valid_map_speed(float(run[0]), max_speed_mps))
+    if not valid_speeds:
+        raise ValueError(f"未找到 0–{max_speed_mps:g} m/s 范围内的有效试验速度段")
+    return ImportedMapFile(path, current, suffix[1:].upper(), len(valid_speeds), valid_speeds)
 
 
 def analyze_map_files(
     files: list[ImportedMapFile],
-    max_speed_mps: float = 1.047,
+    max_speed_mps: float = MAX_MAP_SPEED_MPS,
     soft_current_a: float = 0.3,
     hard_current_a: float = 1.6,
 ) -> MapAnalysisResult:
@@ -422,7 +433,7 @@ def analyze_map_files(
             runs = _parse_pvp(item.path, current_a) if item.format.upper() == "PVP" else _parse_dctw(item.path, current_a)
             kept = 0
             for run_index, (speed, displacement, force, velocity) in enumerate(runs, 1):
-                if speed <= max_speed_mps * 1.001:
+                if _is_valid_map_speed(speed, max_speed_mps):
                     rows.append(_evaluate_run(item.path, item.format, current_a, run_index, speed, displacement, force, velocity))
                     kept += 1
             file_rows.append({"File": item.path.name, "Path": str(item.path), "Format": item.format, "Current A": current_a, "Run Count": len(runs), "Used Runs": kept, "Status": "OK"})

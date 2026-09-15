@@ -68,6 +68,23 @@ def test_current_filename_variants(name, expected):
     assert items.current_from_filename(name) == pytest.approx(expected)
 
 
+def test_file_inspection_hides_header_values_outside_test_speed_range(monkeypatch, tmp_path):
+    path = tmp_path / "20260609 FR30 0.3-A-2.pvp"
+    path.write_bytes(b"fixture")
+    empty = np.array([], dtype=float)
+    monkeypatch.setattr(items, "_parse_pvp", lambda _path, _current: [
+        (40.958, empty, empty, empty),
+        (0.05, empty, empty, empty),
+        (0.13, empty, empty, empty),
+        (1.047, empty, empty, empty),
+    ])
+
+    inspected = items.inspect_map_file(path)
+
+    assert inspected.run_count == 3
+    assert inspected.speeds_mps == pytest.approx((0.05, 0.13, 1.047))
+
+
 def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6 import QtCore, QtWidgets
@@ -86,6 +103,7 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
 
     assert pages.map_soft_current.value() == pytest.approx(0.3)
     assert pages.map_hard_current.value() == pytest.approx(1.6)
+    assert pages.map_show_points.isChecked()
     assert pages.map_file_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
     assert not hasattr(pages, "map_add_button")
     assert pages.map_linearity_plot.backgroundBrush().color().name() == "#ffffff"
@@ -98,8 +116,17 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert len(bars) == 2
     assert all(np.asarray(bar.opts["x"]) == pytest.approx([0.0, 1.0]) for bar in bars)
     assert isinstance(pages._map_spread_right_view, pg.ViewBox)
-    assert pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
-    assert pages.map_force_current_plot.getItem(0, 0).listDataItems()
+    fv_curves = pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
+    fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
+    assert fv_curves and fi_curves
+    assert all(curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine for curve in fv_curves + fi_curves)
+    assert all(curve.opts["connect"] == "all" for curve in fv_curves + fi_curves)
+    assert all(curve.opts["symbol"] == "o" for curve in fv_curves + fi_curves)
+    pages.map_show_points.setChecked(False)
+    app.processEvents()
+    fv_curves = pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
+    fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
+    assert all(curve.opts["symbol"] is None for curve in fv_curves + fi_curves)
     assert pages.map_force_velocity_table.columnCount() == 5
     window.close()
     app.processEvents()
@@ -107,6 +134,6 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
 
 def test_current_packaged_gui_is_v091():
     root = Path(__file__).resolve().parents[1]
-    assert "gui_release_v093" in (root / "launcher.py").read_text()
-    assert "gui_release_v093:main" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.3" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "gui_release_v094" in (root / "launcher.py").read_text()
+    assert "gui_release_v094:main" in (root / "pyproject.toml").read_text()
+    assert "APP_VERSION: V0.9.4" in (root / ".github" / "workflows" / "build-windows.yml").read_text()

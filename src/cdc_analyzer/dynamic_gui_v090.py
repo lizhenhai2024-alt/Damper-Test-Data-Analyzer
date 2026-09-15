@@ -34,6 +34,7 @@ class DynamicPagesController(_BaseController):
         self.map_export_button = QtWidgets.QPushButton()
         self.map_soft_label = QtWidgets.QLabel()
         self.map_hard_label = QtWidgets.QLabel()
+        self.map_show_points = QtWidgets.QCheckBox()
         self.map_soft_current = QtWidgets.QDoubleSpinBox()
         self.map_hard_current = QtWidgets.QDoubleSpinBox()
         for spin in (self.map_soft_current, self.map_hard_current):
@@ -43,11 +44,13 @@ class DynamicPagesController(_BaseController):
             spin.setSuffix(" A")
         self.map_soft_current.setValue(0.3)
         self.map_hard_current.setValue(1.6)
+        self.map_show_points.setChecked(True)
         self.map_folder_button.clicked.connect(self.open_map_folder)
         self.map_remove_button.clicked.connect(self.remove_selected_map_files)
         self.map_analyze_button.clicked.connect(self.analyze_map)
         self.map_export_button.clicked.connect(self.export_map)
-        for widget in (self.map_folder_button, self.map_remove_button, self.map_soft_label, self.map_soft_current, self.map_hard_label, self.map_hard_current, self.map_analyze_button, self.map_export_button):
+        self.map_show_points.toggled.connect(self.refresh_map_plots)
+        for widget in (self.map_folder_button, self.map_remove_button, self.map_soft_label, self.map_soft_current, self.map_hard_label, self.map_hard_current, self.map_show_points, self.map_analyze_button, self.map_export_button):
             controls.addWidget(widget)
         controls.addStretch(1)
         root.addLayout(controls)
@@ -94,6 +97,7 @@ class DynamicPagesController(_BaseController):
         self.map_remove_button.setText(self._text("移除所选数据", "Remove selected data"))
         self.map_soft_label.setText(self._text("软电流", "Soft current"))
         self.map_hard_label.setText(self._text("硬电流", "Hard current"))
+        self.map_show_points.setText(self._text("显示数据点", "Show data points"))
         self.map_analyze_button.setText(self._text("全电流分析", "Full-current analysis"))
         self.map_export_button.setText(self._text("导出 Excel…", "Export Excel…"))
         self.map_views.setTabText(0, self._text("20 电流—力线性", "20 Current–force linearity"))
@@ -305,6 +309,7 @@ class DynamicPagesController(_BaseController):
         fv_plot.showGrid(x=True, y=True, alpha=0.15)
         fv_legend = fv_plot.addLegend(offset=(10, 10), labelTextSize="9pt")
         current_groups = list(raw.groupby("Current A", sort=True))
+        point_symbol = "o" if self.map_show_points.isChecked() else None
         for index, (current, current_group) in enumerate(current_groups):
             color = self.pg.intColor(index, hues=max(1, len(current_groups)))
             legend_curve = None
@@ -312,7 +317,12 @@ class DynamicPagesController(_BaseController):
                 group = current_group[current_group["Direction"] == direction].sort_values("Speed m/s")
                 if group.empty:
                     continue
-                curve = fv_plot.plot(group["Speed m/s"].to_numpy(float), group["Force N"].to_numpy(float), pen=self.pg.mkPen(color, width=1.8), symbol="o", symbolSize=5)
+                pen = self.pg.mkPen(color, width=1.8)
+                pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
+                curve = fv_plot.plot(
+                    group["Speed m/s"].to_numpy(float), group["Force N"].to_numpy(float),
+                    pen=pen, symbol=point_symbol, symbolSize=5, connect="all", antialias=True,
+                )
                 if legend_curve is None:
                     legend_curve = curve
             if legend_curve is not None:
@@ -329,7 +339,12 @@ class DynamicPagesController(_BaseController):
         for index, ((speed, direction), group) in enumerate(raw.groupby(["Speed m/s", "Direction"], sort=True)):
             group = group.sort_values("Current A")
             color = fi_colors[speed]
-            curve = fi_plot.plot(group["Current A"].to_numpy(float), group["Force N"].to_numpy(float), pen=self.pg.mkPen(color, width=1.8), symbol="o", symbolSize=5)
+            pen = self.pg.mkPen(color, width=1.8)
+            pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
+            curve = fi_plot.plot(
+                group["Current A"].to_numpy(float), group["Force N"].to_numpy(float),
+                pen=pen, symbol=point_symbol, symbolSize=5, connect="all", antialias=True,
+            )
             if direction == "Rebound":
                 fi_legend.addItem(curve, f"{speed:g} m/s")
         fi_plot.addLine(y=0, pen=self.pg.mkPen("#606060", width=0.8))
