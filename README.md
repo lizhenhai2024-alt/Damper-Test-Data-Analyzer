@@ -8,7 +8,7 @@
 - 编制：研发院技术中心　李振海
 - 发布日期：2026/9/7
 - 发布：第1版
-- 当前功能版本：`V0.9.3`
+- 当前功能版本：`V0.9.4`
 - Python package version：`1.0.0`
 - GitHub 仓库：[lizhenhai2024-alt/Damper-Test-Data-Analyzer](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer)
 
@@ -46,7 +46,7 @@
 
 ## V0.9.1 全电流分析与 PVP/DCTW 批量分析
 
-V0.9.2 扩展电流文件名识别：除 `0.3A-2` 外，也支持试验台常见的 `0.3-A-2`、`0.3_A_2` 和带日期/样件编号前缀的名称；日期与 `FR30` 等编号不会被当作电流。V0.9.3 删除单文件添加入口，并将第21项横轴改为只显示实际试验速度点的 Audi 分类轴。
+V0.9.2 扩展电流文件名识别：除 `0.3A-2` 外，也支持试验台常见的 `0.3-A-2`、`0.3_A_2` 和带日期/样件编号前缀的名称；日期与 `FR30` 等编号不会被当作电流。V0.9.3 删除单文件添加入口，并将第21项横轴改为只显示实际试验速度点的 Audi 分类轴。V0.9.4 统一过滤文件头误识别的非试验速度，只保留 `0–1.047 m/s` 的有效速度段；F-V 与 F-I 曲线强制采用连续实线，并可通过“显示数据点”统一切换圆点。
 
 - “第20/21项”统一更名为“全电流分析”。第20项计算归一化阻尼力并显示 Audi 标准样式的45°理想虚线；第21项将阻尼力范围柱形和放大倍数折线合并到一个双 Y 轴图中，并标注全部数值。
 - 全电流分析只保留文件夹入口，自动递归扫描 PVP/DCTW；第21项横轴按 Audi 标准等间距排列且只显示实际试验速度点。阻尼力符号固定为复原正、压缩负。
@@ -98,7 +98,7 @@ pytest -q
 cdc-analyzer-gui
 ```
 
-Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.3.exe`。
+Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.4.exe`。
 
 ## CLI 示例
 
