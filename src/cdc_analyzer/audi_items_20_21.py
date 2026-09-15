@@ -32,6 +32,7 @@ class MapAnalysisResult:
     run_detail: pd.DataFrame
     current_force_linearity: pd.DataFrame
     spread_amplification: pd.DataFrame
+    force_velocity_table: pd.DataFrame
     settings: dict[str, object]
 
 
@@ -50,7 +51,7 @@ def current_from_filename(path: str | Path) -> float:
         return float(matches[-1])
     if re.fullmatch(r"\s*\d+(?:\.\d+)?\s*", stem):
         return float(stem)
-    raise ValueError(f"无法从文件名识别电流，请在列表中填写电流 A: {Path(path).name}")
+    raise ValueError(f"无法从文件名自动识别电流 A: {Path(path).name}")
 
 
 class _BondReader:
@@ -380,9 +381,9 @@ def _evaluate_run(path: Path, format_name: str, current_a: float, run_index: int
     }
 
 
-def inspect_map_file(path: str | Path, current_a: float | None = None) -> ImportedMapFile:
+def inspect_map_file(path: str | Path) -> ImportedMapFile:
     path = Path(path)
-    current = current_from_filename(path) if current_a is None else float(current_a)
+    current = current_from_filename(path)
     suffix = path.suffix.lower()
     runs = _parse_pvp(path, current) if suffix == ".pvp" else _parse_dctw(path, current) if suffix == ".dctw" else None
     if runs is None:
@@ -390,22 +391,36 @@ def inspect_map_file(path: str | Path, current_a: float | None = None) -> Import
     return ImportedMapFile(path, current, suffix[1:].upper(), len(runs), tuple(float(run[0]) for run in runs))
 
 
-def analyze_map_files(files: list[ImportedMapFile], max_speed_mps: float = 1.047) -> MapAnalysisResult:
-    currents = {round(float(item.current_a), 9) for item in files if np.isfinite(item.current_a)}
+def analyze_map_files(
+    files: list[ImportedMapFile],
+    max_speed_mps: float = 1.047,
+    soft_current_a: float = 0.3,
+    hard_current_a: float = 1.6,
+) -> MapAnalysisResult:
+    # The current is always derived again from the source filename.  This keeps
+    # the result traceable and prevents stale or manually altered table values.
+    file_currents = {item.path: current_from_filename(item.path) for item in files}
+    currents = {round(float(value), 9) for value in file_currents.values()}
     if len(currents) < 2:
         raise ValueError("第20/21项至少需要两个不同电流档 / Items 20/21 require at least two different current levels")
+    for label, selected in (("软电流", soft_current_a), ("硬电流", hard_current_a)):
+        if not any(np.isclose(selected, current, atol=1e-6) for current in currents):
+            raise ValueError(f"{label} {selected:g} A 在已加载文件名中不存在")
+    if np.isclose(soft_current_a, hard_current_a):
+        raise ValueError("软电流与硬电流不能相同")
     rows, file_rows = [], []
     for item in files:
+        current_a = file_currents[item.path]
         try:
-            runs = _parse_pvp(item.path, item.current_a) if item.format.upper() == "PVP" else _parse_dctw(item.path, item.current_a)
+            runs = _parse_pvp(item.path, current_a) if item.format.upper() == "PVP" else _parse_dctw(item.path, current_a)
             kept = 0
             for run_index, (speed, displacement, force, velocity) in enumerate(runs, 1):
                 if speed <= max_speed_mps * 1.001:
-                    rows.append(_evaluate_run(item.path, item.format, item.current_a, run_index, speed, displacement, force, velocity))
+                    rows.append(_evaluate_run(item.path, item.format, current_a, run_index, speed, displacement, force, velocity))
                     kept += 1
-            file_rows.append({"File": item.path.name, "Path": str(item.path), "Format": item.format, "Current A": item.current_a, "Run Count": len(runs), "Used Runs": kept, "Status": "OK"})
+            file_rows.append({"File": item.path.name, "Path": str(item.path), "Format": item.format, "Current A": current_a, "Run Count": len(runs), "Used Runs": kept, "Status": "OK"})
         except Exception as exc:
-            file_rows.append({"File": item.path.name, "Path": str(item.path), "Format": item.format, "Current A": item.current_a, "Run Count": 0, "Used Runs": 0, "Status": str(exc)})
+            file_rows.append({"File": item.path.name, "Path": str(item.path), "Format": item.format, "Current A": current_a, "Run Count": 0, "Used Runs": 0, "Status": str(exc)})
     detail = pd.DataFrame(rows)
     if detail.empty:
         raise ValueError("No valid damping-force runs at or below 1.047 m/s")
@@ -421,15 +436,19 @@ def analyze_map_files(files: list[ImportedMapFile], max_speed_mps: float = 1.047
     linearity_rows, spread_rows = [], []
     for (speed, direction), group in grouped.groupby(["Speed m/s", "Direction"], sort=True):
         group = group.sort_values("Current A")
-        soft_index, hard_index = group["Abs Force N"].idxmin(), group["Abs Force N"].idxmax()
+        soft_matches = group.index[np.isclose(group["Current A"], soft_current_a, atol=1e-6)]
+        hard_matches = group.index[np.isclose(group["Current A"], hard_current_a, atol=1e-6)]
+        if not len(soft_matches) or not len(hard_matches):
+            raise ValueError(f"{speed:g} m/s {direction} 缺少软电流 {soft_current_a:g} A 或硬电流 {hard_current_a:g} A 数据")
+        soft_index, hard_index = soft_matches[0], hard_matches[0]
         soft, hard = float(group.loc[soft_index, "Abs Force N"]), float(group.loc[hard_index, "Abs Force N"])
         denominator = hard - soft
         normalized = (
             (group["Abs Force N"] - soft) / denominator
-            if denominator > 0
+            if not np.isclose(denominator, 0.0)
             else pd.Series(np.nan, index=group.index)
         )
-        if len(group) >= 2 and denominator > 0:
+        if len(group) >= 2 and not np.isclose(denominator, 0.0):
             coefficient = np.polyfit(group["Current A"], normalized, 1)
             fitted = np.polyval(coefficient, group["Current A"])
             residual = normalized - fitted
@@ -452,9 +471,24 @@ def analyze_map_files(files: list[ImportedMapFile], max_speed_mps: float = 1.047
             "Soft Force N": soft, "Hard Force N": hard,
             "Soft Current A": group.loc[soft_index, "Current A"], "Hard Current A": group.loc[hard_index, "Current A"],
         })
+    force_velocity = grouped.pivot_table(
+        index="Current A", columns=["Direction", "Speed m/s"], values="Force N", aggfunc="first"
+    )
+    ordered_columns = []
+    for direction in ("Rebound", "Compression"):
+        ordered_columns.extend(sorted((column for column in force_velocity.columns if column[0] == direction), key=lambda column: column[1]))
+    force_velocity = force_velocity.reindex(columns=ordered_columns).reset_index()
+    force_velocity.columns = [
+        "Current A"
+        if (column == "Current A" or (isinstance(column, tuple) and column[0] == "Current A"))
+        else f"{column[0]} {float(column[1]):g} m/s"
+        for column in force_velocity.columns
+    ]
+    for column in force_velocity.columns[1:]:
+        force_velocity[column] = force_velocity[column].round().astype("Int64")
     return MapAnalysisResult(
-        pd.DataFrame(file_rows), detail, pd.DataFrame(linearity_rows), pd.DataFrame(spread_rows),
-        {"Standard": "Audi VR-EF-33-2p5 sections 20/21", "Maximum Speed m/s": max_speed_mps, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema", "Repeat Handling": "mean of retained files at equal current/speed/direction"},
+        pd.DataFrame(file_rows), detail, pd.DataFrame(linearity_rows), pd.DataFrame(spread_rows), force_velocity,
+        {"Standard": "Audi VR-EF-33-2p5 sections 20/21", "Maximum Speed m/s": max_speed_mps, "Soft Current A": soft_current_a, "Hard Current A": hard_current_a, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema", "Current Source": "automatically parsed from every filename", "Repeat Handling": "mean of retained files at equal current/speed/direction"},
     )
 
 
@@ -468,6 +502,7 @@ def export_map_analysis_xlsx(result: MapAnalysisResult, path: str | Path) -> Pat
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         result.current_force_linearity.to_excel(writer, sheet_name="20 Current-Force Linearity", index=False)
         result.spread_amplification.to_excel(writer, sheet_name="21 Spread-Amplification", index=False)
+        result.force_velocity_table.to_excel(writer, sheet_name="F-V Data", index=False)
         result.run_detail.to_excel(writer, sheet_name="Run Detail", index=False)
         result.files.to_excel(writer, sheet_name="Source Files", index=False)
         pd.DataFrame([{"Setting": k, "Value": v} for k, v in result.settings.items()]).to_excel(writer, sheet_name="Settings", index=False)

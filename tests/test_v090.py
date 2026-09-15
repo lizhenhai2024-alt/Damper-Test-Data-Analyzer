@@ -50,7 +50,7 @@ def test_items_20_21_calculation_and_repeat_handling(monkeypatch, tmp_path):
             path.write_bytes(b"fixture")
             files.append(items.ImportedMapFile(path, current, "DCTW", 2, (0.1, 0.3)))
     monkeypatch.setattr(items, "_parse_dctw", lambda path, current: _synthetic_runs(current))
-    result = items.analyze_map_files(files)
+    result = items.analyze_map_files(files, soft_current_a=0.0, hard_current_a=1.0)
     assert len(result.run_detail) == 12
     assert set(result.current_force_linearity["Repeat Count"]) == {2}
     for (_speed, direction), group in result.current_force_linearity.groupby(["Speed m/s", "Direction"]):
@@ -88,7 +88,7 @@ def test_v090_gui_has_batch_list_and_safe_remove(tmp_path):
 
 def test_current_packaged_gui_is_v090():
     root = Path(__file__).resolve().parents[1]
-    assert "gui_release_v090" in (root / "launcher.py").read_text()
-    assert "gui_release_v090:main" in (root / "pyproject.toml").read_text()
+    assert "gui_release_v091" in (root / "launcher.py").read_text()
+    assert "gui_release_v091:main" in (root / "pyproject.toml").read_text()
     assert "olefile>=0.47" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.0" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "APP_VERSION: V0.9.1" in (root / ".github" / "workflows" / "build-windows.yml").read_text()

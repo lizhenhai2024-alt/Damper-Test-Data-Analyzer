@@ -33,12 +33,23 @@ class DynamicPagesController(_BaseController):
         self.map_remove_button = QtWidgets.QPushButton()
         self.map_analyze_button = QtWidgets.QPushButton()
         self.map_export_button = QtWidgets.QPushButton()
+        self.map_soft_label = QtWidgets.QLabel()
+        self.map_hard_label = QtWidgets.QLabel()
+        self.map_soft_current = QtWidgets.QDoubleSpinBox()
+        self.map_hard_current = QtWidgets.QDoubleSpinBox()
+        for spin in (self.map_soft_current, self.map_hard_current):
+            spin.setRange(0.0, 20.0)
+            spin.setDecimals(3)
+            spin.setSingleStep(0.1)
+            spin.setSuffix(" A")
+        self.map_soft_current.setValue(0.3)
+        self.map_hard_current.setValue(1.6)
         self.map_add_button.clicked.connect(self.open_map_files)
         self.map_folder_button.clicked.connect(self.open_map_folder)
         self.map_remove_button.clicked.connect(self.remove_selected_map_files)
         self.map_analyze_button.clicked.connect(self.analyze_map)
         self.map_export_button.clicked.connect(self.export_map)
-        for widget in (self.map_add_button, self.map_folder_button, self.map_remove_button, self.map_analyze_button, self.map_export_button):
+        for widget in (self.map_add_button, self.map_folder_button, self.map_remove_button, self.map_soft_label, self.map_soft_current, self.map_hard_label, self.map_hard_current, self.map_analyze_button, self.map_export_button):
             controls.addWidget(widget)
         controls.addStretch(1)
         root.addLayout(controls)
@@ -51,18 +62,26 @@ class DynamicPagesController(_BaseController):
         self.map_file_table = self._new_table()
         self.map_file_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.map_file_table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.map_file_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed)
+        self.map_file_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.map_file_table.setMaximumHeight(210)
         root.addWidget(self.map_file_table)
 
         self.map_views = QtWidgets.QTabWidget()
         self.map_linearity_plot = self.pg.GraphicsLayoutWidget()
         self.map_spread_plot = self.pg.GraphicsLayoutWidget()
+        self.map_force_velocity_plot = self.pg.GraphicsLayoutWidget()
+        self.map_force_current_plot = self.pg.GraphicsLayoutWidget()
+        for plot_widget in (self.map_linearity_plot, self.map_spread_plot, self.map_force_velocity_plot, self.map_force_current_plot):
+            plot_widget.setBackground("#ffffff")
+        self.map_force_velocity_table = self._new_table()
         self.map_linearity_table = self._new_table()
         self.map_spread_table = self._new_table()
         self.map_run_table = self._new_table()
         self.map_views.addTab(self.map_linearity_plot, "")
         self.map_views.addTab(self.map_spread_plot, "")
+        self.map_views.addTab(self.map_force_velocity_plot, "")
+        self.map_views.addTab(self.map_force_current_plot, "")
+        self.map_views.addTab(self.map_force_velocity_table, "")
         self.map_views.addTab(self.map_linearity_table, "")
         self.map_views.addTab(self.map_spread_table, "")
         self.map_views.addTab(self.map_run_table, "")
@@ -76,20 +95,25 @@ class DynamicPagesController(_BaseController):
         self.map_add_button.setText(self._text("添加 PVP / DCTW 文件…", "Add PVP / DCTW files…"))
         self.map_folder_button.setText(self._text("递归扫描文件夹…", "Scan folder recursively…"))
         self.map_remove_button.setText(self._text("移除所选数据", "Remove selected data"))
-        self.map_analyze_button.setText(self._text("分析第20/21项", "Analyze items 20/21"))
+        self.map_soft_label.setText(self._text("软电流", "Soft current"))
+        self.map_hard_label.setText(self._text("硬电流", "Hard current"))
+        self.map_analyze_button.setText(self._text("全电流分析", "Full-current analysis"))
         self.map_export_button.setText(self._text("导出 Excel…", "Export Excel…"))
         self.map_views.setTabText(0, self._text("20 电流—力线性", "20 Current–force linearity"))
         self.map_views.setTabText(1, self._text("21 力值范围与放大倍数", "21 Spread and amplification"))
-        self.map_views.setTabText(2, self._text("20 结果数据", "20 Results"))
-        self.map_views.setTabText(3, self._text("21 结果数据", "21 Results"))
-        self.map_views.setTabText(4, self._text("工况明细", "Run Detail"))
+        self.map_views.setTabText(2, self._text("F-V 图", "F-V plot"))
+        self.map_views.setTabText(3, self._text("F-I 图", "F-I plot"))
+        self.map_views.setTabText(4, self._text("F-V 数据", "F-V data"))
+        self.map_views.setTabText(5, self._text("20 结果数据", "20 Results"))
+        self.map_views.setTabText(6, self._text("21 结果数据", "21 Results"))
+        self.map_views.setTabText(7, self._text("工况明细", "Run Detail"))
         index = self.window.tabs.indexOf(self.map_page)
         if index >= 0:
-            self.window.tabs.setTabText(index, self._text("第20/21项", "Items 20/21"))
+            self.window.tabs.setTabText(index, self._text("全电流分析", "Full-current analysis"))
         if not self.map_files:
             self.map_status.setText(self._text(
-                "加载不同电流的 MTS .PVP 或 CTW .dctw 文件；可多选或递归扫描子文件夹。移除只影响本次分析，不删除原文件。",
-                "Load MTS .PVP or CTW .dctw files from different currents. Removal affects this analysis only and never deletes source files.",
+                "加载全电流 MTS .PVP 或 CTW .dctw 文件；电流 A 必须从文件名自动识别。软电流默认 0.3 A，硬电流默认 1.6 A。",
+                "Load full-current MTS .PVP or CTW .dctw files. Current A is read from each filename. Defaults: soft 0.3 A and hard 1.6 A.",
             ))
 
     def apply_language(self, language):
@@ -98,7 +122,7 @@ class DynamicPagesController(_BaseController):
 
     def open_map_files(self):
         paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
-            self.window, self._text("添加第20/21项试验数据", "Add item 20/21 test data"), "",
+            self.window, self._text("添加全电流试验数据", "Add full-current test data"), "",
             self._text("阻尼器 MAP 数据 (*.pvp *.PVP *.dctw *.DCTW);;所有文件 (*)", "Damper MAP data (*.pvp *.PVP *.dctw *.DCTW);;All files (*)"),
         )
         if paths:
@@ -124,14 +148,8 @@ class DynamicPagesController(_BaseController):
                 if str(path.resolve()).casefold() in existing:
                     continue
                 try:
-                    try:
-                        current = current_from_filename(path)
-                    except ValueError:
-                        current = np.nan
-                    probe = inspect_map_file(path, 0.0 if not np.isfinite(current) else current)
-                    probe.current_a = current
-                    if not np.isfinite(current):
-                        probe.status = self._text("请填写电流", "Enter current")
+                    current = current_from_filename(path)
+                    probe = inspect_map_file(path)
                     self.map_files.append(probe)
                     existing.add(str(path.resolve()).casefold())
                 except Exception as exc:
@@ -141,8 +159,8 @@ class DynamicPagesController(_BaseController):
         self.map_result = None
         self._refresh_map_file_table()
         self.map_status.setText(self._text(
-            f"已加载 {len(self.map_files)} 个文件；双击“电流 A”可修改。" + (f" 失败：{'；'.join(errors)}" if errors else ""),
-            f"Loaded {len(self.map_files)} file(s); double-click Current A to edit." + (f" Errors: {'; '.join(errors)}" if errors else ""),
+            f"已加载 {len(self.map_files)} 个文件；电流 A 已从文件名自动识别。" + (f" 未加载：{'；'.join(errors)}" if errors else ""),
+            f"Loaded {len(self.map_files)} file(s); Current A was read from filenames." + (f" Not loaded: {'; '.join(errors)}" if errors else ""),
         ))
 
     def _refresh_map_file_table(self):
@@ -155,8 +173,7 @@ class DynamicPagesController(_BaseController):
             values = [item.path.name, item.format, "" if not np.isfinite(item.current_a) else f"{item.current_a:g}", ", ".join(f"{s:g}" for s in item.speeds_mps), item.status, str(item.path)]
             for column, value in enumerate(values):
                 cell = QtWidgets.QTableWidgetItem(value)
-                if column != 2:
-                    cell.setFlags(cell.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+                cell.setFlags(cell.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
                 table.setItem(row, column, cell)
         table.resizeColumnsToContents()
 
@@ -168,27 +185,19 @@ class DynamicPagesController(_BaseController):
         self._refresh_map_file_table()
         self.map_status.setText(self._text(f"已保留 {len(self.map_files)} 个文件。原始文件未删除。", f"{len(self.map_files)} file(s) retained. Source files were not deleted."))
 
-    def _sync_map_currents(self):
-        for row, item in enumerate(self.map_files):
-            text = self.map_file_table.item(row, 2).text().strip().replace(",", ".")
-            try:
-                value = float(text)
-            except ValueError as exc:
-                raise ValueError(self._text(f"第 {row + 1} 行电流无效。", f"Invalid current in row {row + 1}.")) from exc
-            if not np.isfinite(value) or value < 0:
-                raise ValueError(self._text(f"第 {row + 1} 行电流必须为非负有限值。", f"Current in row {row + 1} must be finite and non-negative."))
-            item.current_a = value
-
     def analyze_map(self):
         if not self.map_files:
-            QtWidgets.QMessageBox.information(self.window, self._text("第20/21项", "Items 20/21"), self._text("请先添加 PVP 或 DCTW 文件。", "Add PVP or DCTW files first."))
+            QtWidgets.QMessageBox.information(self.window, self._text("全电流分析", "Full-current analysis"), self._text("请先添加 PVP 或 DCTW 文件。", "Add PVP or DCTW files first."))
             return
         cursor_set = False
         try:
-            self._sync_map_currents()
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
             cursor_set = True
-            self.map_result = analyze_map_files(self.map_files)
+            self.map_result = analyze_map_files(
+                self.map_files,
+                soft_current_a=self.map_soft_current.value(),
+                hard_current_a=self.map_hard_current.value(),
+            )
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self.window, self._text("分析错误", "Analysis error"), str(exc))
             return
@@ -197,6 +206,7 @@ class DynamicPagesController(_BaseController):
                 QtWidgets.QApplication.restoreOverrideCursor()
         self._fill_table(self.map_linearity_table, self.map_result.current_force_linearity)
         self._fill_table(self.map_spread_table, self.map_result.spread_amplification)
+        self._fill_table(self.map_force_velocity_table, self.map_result.force_velocity_table)
         self._fill_table(self.map_run_table, self.map_result.run_detail)
         self.refresh_map_plots()
         repeats = int(self.map_result.current_force_linearity["Repeat Count"].max())
@@ -206,53 +216,151 @@ class DynamicPagesController(_BaseController):
         ))
 
     def refresh_map_plots(self):
+        old_plot = getattr(self, "_map_spread_left_plot", None)
+        old_view = getattr(self, "_map_spread_right_view", None)
+        if old_plot is not None and old_view is not None:
+            try:
+                old_plot.vb.sigResized.disconnect(self._sync_map_spread_views)
+                self.map_spread_plot.scene().removeItem(old_view)
+            except (RuntimeError, TypeError):
+                pass
+        self._map_spread_left_plot = None
+        self._map_spread_right_view = None
         self.map_linearity_plot.clear()
         self.map_spread_plot.clear()
+        self.map_force_velocity_plot.clear()
+        self.map_force_current_plot.clear()
+        for widget in (self.map_linearity_plot, self.map_spread_plot, self.map_force_velocity_plot, self.map_force_current_plot):
+            widget.setBackground("#ffffff")
         if self.map_result is None:
             return
         colors = ["#1565c0", "#c62828", "#00897b", "#ef6c00", "#6a1b9a", "#6d4c41", "#37474f", "#ad1457"]
         linearity = self.map_linearity_plot.addPlot(row=0, col=0)
-        self._axis_style(linearity, self._text("归一化阻尼力", "Normalized damping force"))
-        linearity.setLabel("bottom", self._text("电流", "Current"), units="A", **{"font-size": "10pt"})
+        self._map_plot_style(linearity, self._text("归一化阻尼力差", "Normalized damping-force difference"), None, self._text("电流", "Current"), "A")
+        linearity.setTitle(self._text("第20项：电流—阻尼力线性", "Item 20: current–force linearity"), color="#202020", size="11pt")
         linearity.showGrid(x=True, y=True, alpha=0.15)
         legend = linearity.addLegend(offset=(10, 10), labelTextSize="9pt")
+        item20_speeds = sorted(self.map_result.current_force_linearity["Speed m/s"].unique())
+        speed_colors = {speed: self.pg.intColor(index, hues=max(1, len(item20_speeds))) for index, speed in enumerate(item20_speeds)}
         for index, ((speed, direction), group) in enumerate(self.map_result.current_force_linearity.groupby(["Speed m/s", "Direction"], sort=True)):
             group = group.sort_values("Current A")
-            pen = self.pg.mkPen(colors[index % len(colors)], width=2)
+            pen = self.pg.mkPen(speed_colors[speed], width=2)
             pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
             curve = linearity.plot(group["Current A"].to_numpy(float), group["Normalized Force"].to_numpy(float), pen=pen, symbol="o", symbolSize=6)
-            legend.addItem(curve, f"{speed:g} m/s {self._localized_direction(direction)}")
+            if direction == "Rebound":
+                legend.addItem(curve, f"{speed:g} m/s")
         linearity.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
+        soft_current = float(self.map_result.settings["Soft Current A"])
+        hard_current = float(self.map_result.settings["Hard Current A"])
+        ideal_pen = self.pg.mkPen("#202020", width=1.8, style=QtCore.Qt.PenStyle.DashLine)
+        ideal_curve = linearity.plot([soft_current, hard_current], [0.0, 1.0], pen=ideal_pen)
+        linearity.plot([soft_current, hard_current], [0.0, -1.0], pen=ideal_pen)
+        legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
 
         spread_data = self.map_result.spread_amplification
         spread = self.map_spread_plot.addPlot(row=0, col=0)
-        self._axis_style(spread, self._text("阻尼力范围", "Damping force spread"), "N")
-        spread.setLabel("bottom", self._text("速度", "Speed"), units="m/s", **{"font-size": "10pt"})
+        self._map_plot_style(spread, self._text("压缩 ← 阻尼力范围 → 复原", "Compression ← damping-force spread → rebound"), "N", self._text("速度", "Speed"), "m/s")
+        spread.setTitle(self._text("第21项：阻尼力范围和放大倍数", "Item 21: damping-force spread and amplification"), color="#202020", size="11pt")
         spread.showGrid(x=True, y=True, alpha=0.15)
         directions = [direction for direction in ("Rebound", "Compression") if direction in set(spread_data["Direction"])]
-        width = 0.008
+        speeds = np.sort(spread_data["Speed m/s"].unique().astype(float))
+        width = (float(np.min(np.diff(speeds))) * 0.42) if len(speeds) > 1 else 0.02
+        bar_colors = {"Rebound": "#f2aa00", "Compression": "#87a9d3"}
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
-            x = group["Speed m/s"].to_numpy(float) + (index - (len(directions) - 1) / 2) * width
-            bars = self.pg.BarGraphItem(x=x, height=group["Damping Force Spread N"].to_numpy(float), width=width * 0.86, brush=self.pg.mkBrush(colors[index]), pen=self.pg.mkPen(colors[index]))
+            x = group["Speed m/s"].to_numpy(float)
+            values = group["Damping Force Spread N"].to_numpy(float)
+            color = bar_colors[direction]
+            bars = self.pg.BarGraphItem(x=x, height=values, width=width, brush=self.pg.mkBrush(color), pen=self.pg.mkPen("#303030"))
             spread.addItem(bars)
+            for x_value, value in zip(x, values):
+                label = self.pg.TextItem(text=f"{value:.0f}", color="#202020", anchor=(0.5, 1.0 if value >= 0 else 0.0))
+                label.setPos(float(x_value), float(value))
+                spread.addItem(label)
         spread.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
-
-        amplification = self.map_spread_plot.addPlot(row=1, col=0)
-        self._axis_style(amplification, self._text("放大倍数", "Amplification"))
-        amplification.setLabel("bottom", self._text("速度", "Speed"), units="m/s", **{"font-size": "10pt"})
-        amplification.showGrid(x=True, y=True, alpha=0.15)
-        legend2 = amplification.addLegend(offset=(10, 10), labelTextSize="9pt")
+        spread.showAxis("right")
+        right_axis = spread.getAxis("right")
+        right_axis.setLabel(self._text("放大倍数", "Amplification"), **{"font-size": "10pt", "color": "#b71c1c"})
+        right_axis.setPen(self.pg.mkPen("#b71c1c"))
+        right_axis.setTextPen(self.pg.mkPen("#b71c1c"))
+        right_view = self.pg.ViewBox()
+        spread.scene().addItem(right_view)
+        right_axis.linkToView(right_view)
+        right_view.setXLink(spread)
+        self._map_spread_left_plot = spread
+        self._map_spread_right_view = right_view
+        spread.vb.sigResized.connect(self._sync_map_spread_views)
+        self._sync_map_spread_views()
+        legend2 = spread.addLegend(offset=(-10, 10), labelTextSize="9pt")
+        line_colors = {"Rebound": "#d32f2f", "Compression": "#1565c0"}
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
-            curve = amplification.plot(group["Speed m/s"].to_numpy(float), group["Amplification"].to_numpy(float), pen=self.pg.mkPen(colors[index], width=2), symbol="o", symbolSize=6)
+            x = group["Speed m/s"].to_numpy(float)
+            values = group["Amplification"].to_numpy(float)
+            color = line_colors[direction]
+            curve = self.pg.PlotDataItem(x, values, pen=self.pg.mkPen(color, width=2), symbol="o", symbolSize=6, symbolBrush=color)
+            right_view.addItem(curve)
             legend2.addItem(curve, self._localized_direction(direction))
+            for point_index, (x_value, value) in enumerate(zip(x, values)):
+                label = self.pg.TextItem(text=f"{value:.2f}×", color=color, anchor=(0.5, 1.15 if point_index % 2 == 0 else -0.15))
+                label.setPos(float(x_value), float(value))
+                right_view.addItem(label)
+
+        raw = self.map_result.current_force_linearity
+        fv_plot = self.map_force_velocity_plot.addPlot(row=0, col=0)
+        self._map_plot_style(fv_plot, self._text("压缩 ← 阻尼力 → 复原", "Compression ← damping force → rebound"), "N", self._text("速度", "Speed"), "m/s")
+        fv_plot.setTitle(self._text("F-V 全电流曲线", "F-V full-current curves"), color="#202020", size="11pt")
+        fv_plot.showGrid(x=True, y=True, alpha=0.15)
+        fv_legend = fv_plot.addLegend(offset=(10, 10), labelTextSize="9pt")
+        current_groups = list(raw.groupby("Current A", sort=True))
+        for index, (current, current_group) in enumerate(current_groups):
+            color = self.pg.intColor(index, hues=max(1, len(current_groups)))
+            legend_curve = None
+            for direction in ("Rebound", "Compression"):
+                group = current_group[current_group["Direction"] == direction].sort_values("Speed m/s")
+                if group.empty:
+                    continue
+                curve = fv_plot.plot(group["Speed m/s"].to_numpy(float), group["Force N"].to_numpy(float), pen=self.pg.mkPen(color, width=1.8), symbol="o", symbolSize=5)
+                if legend_curve is None:
+                    legend_curve = curve
+            if legend_curve is not None:
+                fv_legend.addItem(legend_curve, f"{current:g} A")
+        fv_plot.addLine(y=0, pen=self.pg.mkPen("#606060", width=0.8))
+
+        fi_plot = self.map_force_current_plot.addPlot(row=0, col=0)
+        self._map_plot_style(fi_plot, self._text("压缩 ← 阻尼力 → 复原", "Compression ← damping force → rebound"), "N", self._text("电流", "Current"), "A")
+        fi_plot.setTitle(self._text("F-I 不同速度曲线", "F-I curves by speed"), color="#202020", size="11pt")
+        fi_plot.showGrid(x=True, y=True, alpha=0.15)
+        fi_legend = fi_plot.addLegend(offset=(10, 10), labelTextSize="9pt")
+        fi_speeds = sorted(raw["Speed m/s"].unique())
+        fi_colors = {speed: self.pg.intColor(index, hues=max(1, len(fi_speeds))) for index, speed in enumerate(fi_speeds)}
+        for index, ((speed, direction), group) in enumerate(raw.groupby(["Speed m/s", "Direction"], sort=True)):
+            group = group.sort_values("Current A")
+            color = fi_colors[speed]
+            curve = fi_plot.plot(group["Current A"].to_numpy(float), group["Force N"].to_numpy(float), pen=self.pg.mkPen(color, width=1.8), symbol="o", symbolSize=5)
+            if direction == "Rebound":
+                fi_legend.addItem(curve, f"{speed:g} m/s")
+        fi_plot.addLine(y=0, pen=self.pg.mkPen("#606060", width=0.8))
+
+    def _map_plot_style(self, plot, left, left_units, bottom, bottom_units):
+        self._axis_style(plot, left, left_units)
+        plot.setLabel("bottom", bottom, units=bottom_units, **{"font-size": "10pt", "font-weight": "normal"})
+        for side in ("left", "bottom"):
+            plot.getAxis(side).setPen(self.pg.mkPen("#202020"))
+            plot.getAxis(side).setTextPen(self.pg.mkPen("#202020"))
+
+    def _sync_map_spread_views(self):
+        plot = getattr(self, "_map_spread_left_plot", None)
+        view = getattr(self, "_map_spread_right_view", None)
+        if plot is not None and view is not None:
+            view.setGeometry(plot.vb.sceneBoundingRect())
+            view.linkedViewChanged(plot.vb, view.XAxis)
 
     def export_map(self):
         if self.map_result is None:
-            QtWidgets.QMessageBox.information(self.window, self._text("导出", "Export"), self._text("请先完成第20/21项分析。", "Analyze items 20/21 first."))
+            QtWidgets.QMessageBox.information(self.window, self._text("导出", "Export"), self._text("请先完成全电流分析。", "Run full-current analysis first."))
             return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(self.window, self._text("导出第20/21项结果", "Export item 20/21 results"), "Audi_Items_20_21.xlsx", "Excel (*.xlsx)")
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self.window, self._text("导出全电流分析结果", "Export full-current analysis"), "Full_Current_Analysis.xlsx", "Excel (*.xlsx)")
         if path:
             output = export_map_analysis_xlsx(self.map_result, path)
             self.map_status.setText(self._text(f"已导出：{output}", f"Exported: {output}"))
