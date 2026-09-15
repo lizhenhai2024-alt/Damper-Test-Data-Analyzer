@@ -52,6 +52,20 @@ def test_missing_filename_current_is_rejected(tmp_path):
         items.current_from_filename(path)
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("20260609  FR30     0.3-A-2.pvp", 0.3),
+        ("20260609  FR30     0.9-A.pvp", 0.9),
+        ("sample-1.6_A_2.pvp", 1.6),
+        ("sample-0.4A-2.dctw", 0.4),
+        ("0.5.pvp", 0.5),
+    ],
+)
+def test_current_filename_variants(name, expected):
+    assert items.current_from_filename(name) == pytest.approx(expected)
+
+
 def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6 import QtCore, QtWidgets
@@ -87,6 +101,6 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
 
 def test_current_packaged_gui_is_v091():
     root = Path(__file__).resolve().parents[1]
-    assert "gui_release_v091" in (root / "launcher.py").read_text()
-    assert "gui_release_v091:main" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.1" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "gui_release_v092" in (root / "launcher.py").read_text()
+    assert "gui_release_v092:main" in (root / "pyproject.toml").read_text()
+    assert "APP_VERSION: V0.9.2" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
