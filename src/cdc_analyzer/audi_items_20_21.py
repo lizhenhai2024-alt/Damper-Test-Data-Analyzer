@@ -46,7 +46,14 @@ def discover_map_files(folder: str | Path) -> list[Path]:
 
 def current_from_filename(path: str | Path) -> float:
     stem = Path(path).stem.replace(",", ".")
-    matches = re.findall(r"(?<![\d.])(\d+(?:\.\d+)?)\s*[aA](?=$|[-_\s])", stem)
+    # Common bench exports place an optional separator before the unit, for
+    # example ``0.3A-2``, ``0.3-A-2`` or ``0.3_A_2``.  Requiring the explicit
+    # A unit prevents dates and specimen identifiers such as FR30 from being
+    # mistaken for current values.
+    matches = re.findall(
+        r"(?<![\d.])(\d+(?:\.\d+)?)\s*(?:[-_]\s*)?[aA](?=$|[-_\s])",
+        stem,
+    )
     if matches:
         return float(matches[-1])
     if re.fullmatch(r"\s*\d+(?:\.\d+)?\s*", stem):
