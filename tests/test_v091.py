@@ -34,6 +34,8 @@ def test_full_current_defaults_filename_source_and_fv_table(monkeypatch, tmp_pat
     assert result.settings["Soft Current A"] == pytest.approx(0.3)
     assert result.settings["Hard Current A"] == pytest.approx(1.6)
     assert sorted(result.run_detail["Current A"].unique()) == pytest.approx([0.3, 0.95, 1.6])
+    assert (result.current_force_linearity.query("Direction == 'Rebound'")["Force N"] > 0).all()
+    assert (result.current_force_linearity.query("Direction == 'Compression'")["Force N"] < 0).all()
     assert list(result.force_velocity_table.columns) == [
         "Current A", "Rebound 0.1 m/s", "Rebound 0.3 m/s",
         "Compression 0.1 m/s", "Compression 0.3 m/s",
@@ -85,12 +87,16 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert pages.map_soft_current.value() == pytest.approx(0.3)
     assert pages.map_hard_current.value() == pytest.approx(1.6)
     assert pages.map_file_table.editTriggers() == QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+    assert not hasattr(pages, "map_add_button")
     assert pages.map_linearity_plot.backgroundBrush().color().name() == "#ffffff"
     linearity = pages.map_linearity_plot.getItem(0, 0)
     dashed = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.DashLine]
     assert len(dashed) == 2
     assert pages.map_spread_plot.getItem(0, 0) is not None
     assert pages.map_spread_plot.getItem(1, 0) is None
+    bars = [item for item in pages.map_spread_plot.getItem(0, 0).items if isinstance(item, pg.BarGraphItem)]
+    assert len(bars) == 2
+    assert all(np.asarray(bar.opts["x"]) == pytest.approx([0.0, 1.0]) for bar in bars)
     assert isinstance(pages._map_spread_right_view, pg.ViewBox)
     assert pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
     assert pages.map_force_current_plot.getItem(0, 0).listDataItems()
@@ -101,6 +107,6 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
 
 def test_current_packaged_gui_is_v091():
     root = Path(__file__).resolve().parents[1]
-    assert "gui_release_v092" in (root / "launcher.py").read_text()
-    assert "gui_release_v092:main" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.2" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "gui_release_v093" in (root / "launcher.py").read_text()
+    assert "gui_release_v093:main" in (root / "pyproject.toml").read_text()
+    assert "APP_VERSION: V0.9.3" in (root / ".github" / "workflows" / "build-windows.yml").read_text()

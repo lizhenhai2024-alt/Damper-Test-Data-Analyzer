@@ -28,7 +28,6 @@ class DynamicPagesController(_BaseController):
         self.map_page = QtWidgets.QWidget()
         root = QtWidgets.QVBoxLayout(self.map_page)
         controls = QtWidgets.QHBoxLayout()
-        self.map_add_button = QtWidgets.QPushButton()
         self.map_folder_button = QtWidgets.QPushButton()
         self.map_remove_button = QtWidgets.QPushButton()
         self.map_analyze_button = QtWidgets.QPushButton()
@@ -44,12 +43,11 @@ class DynamicPagesController(_BaseController):
             spin.setSuffix(" A")
         self.map_soft_current.setValue(0.3)
         self.map_hard_current.setValue(1.6)
-        self.map_add_button.clicked.connect(self.open_map_files)
         self.map_folder_button.clicked.connect(self.open_map_folder)
         self.map_remove_button.clicked.connect(self.remove_selected_map_files)
         self.map_analyze_button.clicked.connect(self.analyze_map)
         self.map_export_button.clicked.connect(self.export_map)
-        for widget in (self.map_add_button, self.map_folder_button, self.map_remove_button, self.map_soft_label, self.map_soft_current, self.map_hard_label, self.map_hard_current, self.map_analyze_button, self.map_export_button):
+        for widget in (self.map_folder_button, self.map_remove_button, self.map_soft_label, self.map_soft_current, self.map_hard_label, self.map_hard_current, self.map_analyze_button, self.map_export_button):
             controls.addWidget(widget)
         controls.addStretch(1)
         root.addLayout(controls)
@@ -92,8 +90,7 @@ class DynamicPagesController(_BaseController):
     def _v090_language(self):
         if not hasattr(self, "map_page"):
             return
-        self.map_add_button.setText(self._text("添加 PVP / DCTW 文件…", "Add PVP / DCTW files…"))
-        self.map_folder_button.setText(self._text("递归扫描文件夹…", "Scan folder recursively…"))
+        self.map_folder_button.setText(self._text("选择全电流数据文件夹…", "Select full-current data folder…"))
         self.map_remove_button.setText(self._text("移除所选数据", "Remove selected data"))
         self.map_soft_label.setText(self._text("软电流", "Soft current"))
         self.map_hard_label.setText(self._text("硬电流", "Hard current"))
@@ -119,14 +116,6 @@ class DynamicPagesController(_BaseController):
     def apply_language(self, language):
         super().apply_language(language)
         self._v090_language()
-
-    def open_map_files(self):
-        paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
-            self.window, self._text("添加全电流试验数据", "Add full-current test data"), "",
-            self._text("阻尼器 MAP 数据 (*.pvp *.PVP *.dctw *.DCTW);;所有文件 (*)", "Damper MAP data (*.pvp *.PVP *.dctw *.DCTW);;All files (*)"),
-        )
-        if paths:
-            self._add_map_paths([Path(path) for path in paths])
 
     def open_map_folder(self):
         folder = QtWidgets.QFileDialog.getExistingDirectory(self.window, self._text("选择数据文件夹", "Select data folder"), "")
@@ -264,11 +253,14 @@ class DynamicPagesController(_BaseController):
         spread.showGrid(x=True, y=True, alpha=0.15)
         directions = [direction for direction in ("Rebound", "Compression") if direction in set(spread_data["Direction"])]
         speeds = np.sort(spread_data["Speed m/s"].unique().astype(float))
-        width = (float(np.min(np.diff(speeds))) * 0.42) if len(speeds) > 1 else 0.02
+        speed_positions = {float(speed): float(index) for index, speed in enumerate(speeds)}
+        spread.getAxis("bottom").setTicks([[(speed_positions[float(speed)], f"{speed:g}") for speed in speeds]])
+        spread.setXRange(-0.6, max(0.6, len(speeds) - 0.4), padding=0)
+        width = 0.55
         bar_colors = {"Rebound": "#f2aa00", "Compression": "#87a9d3"}
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
-            x = group["Speed m/s"].to_numpy(float)
+            x = np.asarray([speed_positions[float(speed)] for speed in group["Speed m/s"]], dtype=float)
             values = group["Damping Force Spread N"].to_numpy(float)
             color = bar_colors[direction]
             bars = self.pg.BarGraphItem(x=x, height=values, width=width, brush=self.pg.mkBrush(color), pen=self.pg.mkPen("#303030"))
@@ -295,7 +287,7 @@ class DynamicPagesController(_BaseController):
         line_colors = {"Rebound": "#d32f2f", "Compression": "#1565c0"}
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
-            x = group["Speed m/s"].to_numpy(float)
+            x = np.asarray([speed_positions[float(speed)] for speed in group["Speed m/s"]], dtype=float)
             values = group["Amplification"].to_numpy(float)
             color = line_colors[direction]
             curve = self.pg.PlotDataItem(x, values, pen=self.pg.mkPen(color, width=2), symbol="o", symbolSize=6, symbolBrush=color)
