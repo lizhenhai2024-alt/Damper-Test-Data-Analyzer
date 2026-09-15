@@ -8,7 +8,7 @@
 - 编制：研发院技术中心　李振海
 - 发布日期：2026/9/7
 - 发布：第1版
-- 当前功能版本：`V0.8.21`
+- 当前功能版本：`V0.9.0`
 - Python package version：`1.0.0`
 - GitHub 仓库：[lizhenhai2024-alt/Damper-Test-Data-Analyzer](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer)
 
@@ -44,6 +44,15 @@
 - `.xlsx` 与 PNG 导出；菜单栏可选 150 / 300 / 600 PPI，默认 300 PPI。PNG 为无损位图，清晰度由导出像素尺寸与查看比例决定；打印或裁切请选择 600 PPI，并按 100% 比例检查原图。
 - Windows x86-64 单文件 EXE 自动构建
 
+## V0.9.0 Audi 第20/21项与 PVP/DCTW 批量分析
+
+- 新增“Audi 第20/21项”页面：第20项计算不同电流下的归一化阻尼力、电流—力线性拟合 R² 和最大偏差；第21项按速度与压缩/复原方向计算硬—软阻尼力范围和放大倍数。
+- 支持 MTS Shock `.PVP` 和 CTW Probe `.dctw`。PVP 可从一个文件读取多个速度段；DCTW 使用文件内 Bond 压缩数据、通道定义及力传感器标定表，直接换算为 N，无需先由试验软件导出 CSV。
+- 可一次选择多个文件，也可递归扫描文件夹及全部子文件夹。程序从 `0.4.pvp`、`2#-0.3A-1.dctw` 等文件名识别电流，列表中的电流允许人工修正。
+- 文件列表支持多选“移除所选数据”，只从当前分析中排除重复或异常测量，不删除磁盘原文件。同电流、速度和方向的保留重复测量取均值，并在结果中保存重复次数和标准差。
+- 仅使用不高于 1.047 m/s 的速度段；每个速度段取最后一个完整循环，在中心总行程 10% 窗口分别评价复原最大力和压缩最小力。
+- Excel 导出包含第20项、第21项、运行明细、源文件和计算设置五个工作表。
+
 ## V0.8.21 双 Y 轴阻尼力响应、客户速度预设与迟滞数据导入
 
 - 自动适配 100% / 150% DPI，工具栏换行，小屏幕可滚动查看完整响应图。
@@ -61,7 +70,7 @@
 - 主界面“评价设置 → 评价方法”仅保留“窗口均值”和“目标位移穿越插值”，默认使用“窗口均值”；响应时间与迟滞页面继续保留各自的 BMW/Audi 客户规范选择。
 - 窗口基准固定为“总行程全宽”并隐藏该固定控件；窗口比例仍可设置。
 - 迟滞数据可一次选择多个文件，也可选择一个文件夹并递归扫描全部子文件夹中的 `.dat` 文件。
-- 详细使用说明见 [V0.8.21 使用说明](docs/V0.8.21_USER_GUIDE.md)。
+- 详细使用说明见 [V0.9.0 使用说明](docs/V0.9.0_USER_GUIDE.md)。
 
 ## 数据质量原则
 
@@ -84,7 +93,7 @@ pytest -q
 cdc-analyzer-gui
 ```
 
-Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.8.21.exe`。
+Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.0.exe`。
 
 ## CLI 示例
 

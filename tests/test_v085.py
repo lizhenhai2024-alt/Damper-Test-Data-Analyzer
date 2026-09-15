@@ -204,12 +204,12 @@ def test_v085_gui_response_and_hysteresis(tmp_path):
     app.processEvents()
 
 
-def test_current_packaged_gui_is_v085():
+def test_current_packaged_gui_keeps_v085_features_in_v090():
     root = Path(__file__).resolve().parents[1]
-    assert "gui_release_v085" in (root / "launcher.py").read_text()
-    assert "gui_release_v085:main" in (root / "pyproject.toml").read_text()
+    assert "gui_release_v090" in (root / "launcher.py").read_text()
+    assert "gui_release_v090:main" in (root / "pyproject.toml").read_text()
     workflow = (root / ".github" / "workflows" / "build-windows.yml").read_text()
-    assert "APP_VERSION: V0.8.21" in workflow
+    assert "APP_VERSION: V0.9.0" in workflow
     assert 'Damper_Test_Data_Analyzer_$env:APP_VERSION' in workflow
     assert "Damper_Test_Data_Analyzer_${{ env.APP_VERSION }}.exe" in workflow
 
