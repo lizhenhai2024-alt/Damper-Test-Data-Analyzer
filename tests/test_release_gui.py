@@ -11,6 +11,7 @@ pytest.importorskip("pyqtgraph")
 
 def test_release_ui_defaults_and_professional_controls():
     from PySide6 import QtWidgets
+    from cdc_analyzer import __version__
     from cdc_analyzer.gui_release import _build_release_gui_classes
     from cdc_analyzer.product_info import COMPANY_EN, COMPANY_ZH, PRODUCT_NAME
 
@@ -18,7 +19,8 @@ def test_release_ui_defaults_and_professional_controls():
     MainWindow = _build_release_gui_classes()
     window = MainWindow()
 
-    assert window.windowTitle() == PRODUCT_NAME == "Damper Test Data Analyzer"
+    assert window.windowTitle() == f"{PRODUCT_NAME} V{__version__}"
+    assert PRODUCT_NAME == "Damper Test Data Analyzer"
     assert window.language == "zh_CN"
     assert window.language_combo.currentData() == "zh_CN"
     assert window.language_box.isHidden()
@@ -78,7 +80,7 @@ def test_release_ui_defaults_and_professional_controls():
 
     window.language_combo.setCurrentIndex(window.language_combo.findData("en_US"))
     app.processEvents()
-    assert window.windowTitle() == PRODUCT_NAME
+    assert window.windowTitle() == f"{PRODUCT_NAME} V{__version__}"
     assert window.release_language_label.text() == "UI Language"
     assert window.help_button.text() == "Help / User Guide"
     assert window.tabs.tabText(window.tabs.indexOf(window.help_page)) == "Professional Help"

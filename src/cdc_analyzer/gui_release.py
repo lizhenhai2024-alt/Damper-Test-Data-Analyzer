@@ -4,6 +4,7 @@ import html
 import sys
 from importlib.resources import files
 
+from . import __version__
 from .dynamic_gui import DynamicPagesController
 from .gui import _qt_imports
 from .gui_v05 import _build_gui_classes_v05, _help_html, _t
@@ -332,7 +333,7 @@ def _build_release_gui_classes():
                 self.dynamic_pages.refresh_hysteresis_plot()
 
         def _apply_release_identity(self):
-            self.setWindowTitle(PRODUCT_NAME)
+            self.setWindowTitle(f"{PRODUCT_NAME} V{__version__}")
             icon_path = _find_app_icon()
             if icon_path:
                 icon = QtGui.QIcon(icon_path)
