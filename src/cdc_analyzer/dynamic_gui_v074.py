@@ -86,7 +86,7 @@ class DynamicPagesController(_BaseDynamicPagesController):
                 ),
                 end_average_fraction=self.response_end_fraction.value() / 100.0,
                 t90_limit_ms=limit,
-                calculate_current_undershoot=(
+                calculate_current_overshoot=(
                     self.response_current_undershoot.isChecked()
                     if hasattr(self, "response_current_undershoot") else False
                 ),

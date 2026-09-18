@@ -47,7 +47,7 @@ def _release_help_html(language: str) -> str:
           <li><b>红旗 / 国内主机 / 零跑：</b>当前按所选速度预设执行通用响应时间提取，并使用界面中设置的电流与载荷阈值；未提供的客户限值不会自动推断。</li>
           <li><b>图形标注：</b>起始载荷阈值默认 1% 并可调整，F 与 t 的下标同步使用设置值。F 起始阈值和 F₆₃% 可分别勾选显示；取消后对应参考线、交点和时间文字同步隐藏。文字为透明背景、正常字重，与坐标轴标题同为 10 pt。</li>
           <li><b>双 Y 轴阻尼力响应：</b>X 轴为时间，左侧蓝色轴与曲线表示电流，右侧红色轴与曲线表示阻尼力。两条竖虚线标记电流 I₁₀% 和阻尼力 F₉₀% 的线性插值时刻。电流曲线只显示 I₁₀% 交点，不显示 F₉₀% 时刻的电流交点和文字；阻尼力曲线显示两个时刻的交点。主响应时间为 t(F₉₀%) − t(I₁₀%)，与三联图一致。</li>
-          <li><b>计算电流下冲：</b>勾选项默认关闭；开启后识别电流过冲引起的瞬态力跌落。当响应被分类为“瞬态跌落-恢复型（Dip &amp; Recovery）”时，稳态力差不足，传统 t₆₃% / t₉₀% 不适用；图中明确标注并在计时上做门控处理，避免把瞬态跌落误判为真实响应时间。</li>
+          <li><b>计算电流过冲：</b>勾选项默认开启；对电流过冲（上升超过终值）或电流下冲（下降低于终值）引起的瞬态力跌落进行识别。图中在电流曲线上标注 Imax= / Imin= 电流极值与 I100%= 电流满幅值。当响应被分类为“瞬态跌落-恢复型（Dip &amp; Recovery）”时，稳态力差不足，传统 t₆₃% / t₉₀% 不适用；图中明确标注并在计时上做门控处理，避免把瞬态跌落误判为真实响应时间。</li>
           <li>若未输入客户 t₉₀% 限值，只报告测量值，不自动判定 PASS/FAIL。</li>
         </ul>
         <p><b>显示缩放：</b>使用 Qt 自动 DPI 缩放，支持 100% / 150%。工具栏自动换行；较小屏幕可滚动查看完整响应图，字体不会被二次放大或裁切。</p>
@@ -83,7 +83,7 @@ def _release_help_html(language: str) -> str:
           <li><b>Hongqi / Domestic OEM / Leapmotor:</b>use the selected speed preset with the common response extraction and operator-configured current/force thresholds. Customer limits are never inferred when they have not been supplied.</li>
           <li><b>Plot labels:</b>The initial force threshold defaults to 1% and is adjustable; the F and t subscripts follow its setting. The initial F threshold and F₆₃% can be shown independently. Clearing either option hides its guides, intersection and time label together. Labels use transparent, normal-weight 10 pt text.</li>
           <li><b>Dual-axis damping response:</b>Time is the X axis. The blue left axis and curve show current; the red right axis and curve show damping force. Two vertical dashed guides mark the linearly interpolated current I₁₀% and force F₉₀% times. The current curve shows only the I₁₀% intersection; its point and text at the F₉₀% time are hidden. The force curve retains both intersections. The primary result is t(F₉₀%) − t(I₁₀%), matching the three-panel plot.</li>
-          <li><b>Current undershoot:</b> optional and off by default; when enabled, transient force dips caused by current overshoot are detected. If the response is classified as Dip &amp; Recovery, the steady-state force gap is insufficient and classical t₆₃% / t₉₀% do not apply. The plot annotates this and gates the response timing so a transient dip is not mistaken for the true response time.</li>
+          <li><b>Current overshoot:</b> enabled by default; transient force dips caused by current overshoot (rise above target) or undershoot (fall below target) are detected. The current trace is annotated with Imax= / Imin= extremes and the I100%= full-scale level. If the response is classified as Dip &amp; Recovery, the steady-state force gap is insufficient and classical t₆₃% / t₉₀% do not apply. The plot annotates this and gates the response timing so a transient dip is not mistaken for the true response time.</li>
           <li>No PASS/FAIL is assigned without an entered project t₉₀% limit.</li>
         </ul>
         <p>Qt handles 100% / 150% display scaling. Controls wrap and the full response graph remains scrollable on smaller displays.</p>

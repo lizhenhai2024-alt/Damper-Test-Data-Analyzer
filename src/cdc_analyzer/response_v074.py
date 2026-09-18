@@ -468,11 +468,23 @@ def analyze_response_time_v074(
         area_end = force_recovery_time if np.isfinite(force_recovery_time) else float(eval_t[-1])
         area_mask = (eval_t >= t0) & (eval_t <= area_end)
         dip_area = float(np.trapezoid(np.maximum(force_0 - eval_f[area_mask], 0), eval_t[area_mask])) if is_dip else float("nan")
-        if config.calculate_current_undershoot and delta_current < 0:
-            current_min = float(np.min(currents[(ts >= t0) & (ts <= eval_t[-1])]))
-            current_undershoot = max(0.0, current_end - current_min)
+        if config.calculate_current_overshoot:
+            response_window = currents[(ts >= t0) & (ts <= eval_t[-1])]
+            response_times = ts[(ts >= t0) & (ts <= eval_t[-1])]
+            current_max = float(np.max(response_window))
+            current_min = float(np.min(response_window))
+            if delta_current >= 0:
+                current_overshoot = max(0.0, current_max - current_end)
+                current_extreme = current_max
+                extreme_time = float(response_times[int(np.argmax(response_window))])
+            else:
+                current_overshoot = max(0.0, current_end - current_min)
+                current_extreme = current_min
+                extreme_time = float(response_times[int(np.argmin(response_window))])
         else:
-            current_min = current_undershoot = float("nan")
+            current_max = current_min = current_overshoot = float("nan")
+            current_extreme = float("nan")
+            extreme_time = float("nan")
         current_settle = _settled_time(ts, currents, current_end,
                                        max(0.02 * abs(current_end), 0.01),
                                        t0, config.response_dwell_s)
@@ -604,9 +616,12 @@ def analyze_response_time_v074(
                 "Force Recovery Time ms": (force_recovery_time - t0) * 1000 if np.isfinite(force_recovery_time) else float("nan"),
                 "Force Settling Time ms": (force_settle - t0) * 1000 if np.isfinite(force_settle) else float("nan"),
                 "Force Dip Area N s": dip_area,
+                "Current Maximum A": current_max,
                 "Current Minimum A": current_min,
-                "Current Undershoot A": current_undershoot,
-                "Current Undershoot %": 100 * current_undershoot / abs(delta_current) if delta_current < 0 else float("nan"),
+                "Current Overshoot A": current_overshoot,
+                "Current Overshoot %": 100 * current_overshoot / abs(delta_current) if np.isfinite(current_overshoot) else float("nan"),
+                "Current Extreme A": current_extreme,
+                "Current Extreme Time s": extreme_time,
                 "Current Settling Time ms": (current_settle - t0) * 1000 if np.isfinite(current_settle) else float("nan"),
                 "Force Change": "Build-up" if abs(force_100) > abs(force_0) else "Decay",
                 "F0 N": force_0,
@@ -652,7 +667,7 @@ def analyze_response_time_v074(
         "Force Separation Noise Factor": config.force_separation_noise_factor,
         "Force Separation Fraction": config.force_separation_fraction,
         "Response Dwell ms": config.response_dwell_s * 1000,
-        "Calculate Current Undershoot": config.calculate_current_undershoot,
+        "Calculate Current Overshoot": config.calculate_current_overshoot,
         "Target Speed Tolerance %": target_speed_tolerance * 100.0,
         "Target Speeds m/s": ", ".join(f"{v:g}" for v in _target_speeds(config.standard)),
         "Detected Current Events": len(candidates),

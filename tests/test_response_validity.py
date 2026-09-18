@@ -36,13 +36,13 @@ def test_dip_and_recovery_does_not_report_classical_timing():
     assert row["Force Dip Area N s"] > 0
     assert row["Time to Force Minimum ms"] > 0
     assert row["Force Recovery Time ms"] > row["Time to Force Minimum ms"]
-    assert np.isnan(row["Current Undershoot A"])
+    assert np.isnan(row["Current Overshoot A"])
     enabled = analyze_response_time_v074(
         DataSet(frame, Path("dip.dat"), "synthetic"),
-        ResponseConfig(standard=ResponseStandard.BMW, calculate_current_undershoot=True),
+        ResponseConfig(standard=ResponseStandard.BMW, calculate_current_overshoot=True),
     ).events.iloc[0]
-    assert np.isfinite(enabled["Current Undershoot A"])
-    assert enabled["Current Undershoot A"] >= 0
+    assert np.isfinite(enabled["Current Overshoot A"])
+    assert enabled["Current Overshoot A"] >= 0
 
 
 def test_no_force_excursion_is_classified_without_timing():

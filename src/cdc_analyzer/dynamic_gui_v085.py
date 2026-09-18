@@ -51,7 +51,7 @@ class DynamicPagesController(_BaseController):
         self.response_show_f63 = QtWidgets.QCheckBox()
         self.response_show_f63.setChecked(True)
         self.response_current_undershoot = QtWidgets.QCheckBox()
-        self.response_current_undershoot.setChecked(False)
+        self.response_current_undershoot.setChecked(True)
         self.response_current_undershoot.toggled.connect(self._reanalyze_response_threshold)
         self.response_show_f1.toggled.connect(self.refresh_response_plot)
         self.response_show_f63.toggled.connect(self.refresh_response_plot)
@@ -95,13 +95,19 @@ class DynamicPagesController(_BaseController):
             self._text("显示 F₆₃%", "Show F₆₃%")
         )
         self.response_current_undershoot.setText(
-            self._text("计算电流下冲", "Calculate current undershoot")
+            self._text("计算电流过冲", "Calculate current overshoot")
         )
 
     def _reanalyze_response_threshold(self):
         self._update_response_threshold_texts()
         if self.response_dataset is not None and self.response_result is not None:
             self.analyze_response()
+
+    def analyze_response(self):
+        super().analyze_response()
+        if self.response_result is not None and hasattr(self, "response_plot_mode"):
+            if self.response_plot_mode.currentData() != "stacked":
+                self.response_plot_mode.setCurrentIndex(0)
 
     def _font(self):
         font = QtGui.QFont(QtWidgets.QApplication.font())
@@ -319,12 +325,19 @@ class DynamicPagesController(_BaseController):
                     ("t₉₀%", "Switch Time t90 ms", True),
                 ) if visible and np.isfinite(row[key])
             ]
-        current_levels = [("", row["Trigger Current A"]), ("I₁₀₀%", row["Current 100% A"])]
+        current_levels = [("", row["Trigger Current A"])]
+        if np.isfinite(float(row["Current 100% A"])):
+            current_levels.append((f"I100% = {float(row['Current 100% A']):.3f} A", float(row["Current 100% A"])))
         current_markers = [(current_trigger_label, t0)]
-        if response_type == "Dip & Recovery" and float(row.get("Current Undershoot A", 0)) > 0.01:
-            current_levels.append(("Imin", row["Current Minimum A"]))
-            current_values = data[CURRENT].to_numpy(float)
-            current_markers.append(("Imin", float(t[int(np.argmin(current_values))])))
+        current_values = data[CURRENT].to_numpy(float)
+        overshoot_a = float(row.get("Current Overshoot A", 0))
+        if np.isfinite(overshoot_a) and overshoot_a > 0.01:
+            extreme = float(row.get("Current Extreme A", np.nan))
+            extreme_time = float(row.get("Current Extreme Time s", np.nan))
+            if np.isfinite(extreme) and np.isfinite(extreme_time):
+                extreme_label = "Imax" if float(row.get("Current Delta A", 0)) >= 0 else "Imin"
+                current_levels.append((f"{extreme_label} = {extreme:.3f} A", extreme))
+                current_markers.append((extreme_label, extreme_time))
             settle_ms = float(row.get("Current Settling Time ms", np.nan))
             if np.isfinite(settle_ms):
                 current_markers.append((f"稳定 = {settle_ms:.2f} ms", t0 + settle_ms / 1000))
