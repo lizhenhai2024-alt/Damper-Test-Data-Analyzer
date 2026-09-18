@@ -50,6 +50,9 @@ class DynamicPagesController(_BaseController):
         self.response_show_f1.setChecked(True)
         self.response_show_f63 = QtWidgets.QCheckBox()
         self.response_show_f63.setChecked(True)
+        self.response_current_undershoot = QtWidgets.QCheckBox()
+        self.response_current_undershoot.setChecked(False)
+        self.response_current_undershoot.toggled.connect(self._reanalyze_response_threshold)
         self.response_show_f1.toggled.connect(self.refresh_response_plot)
         self.response_show_f63.toggled.connect(self.refresh_response_plot)
         self.response_force_start_fraction.valueChanged.connect(
@@ -71,6 +74,7 @@ class DynamicPagesController(_BaseController):
             self.response_force_start_fraction,
             self.response_show_f1,
             self.response_show_f63,
+            self.response_current_undershoot,
         ):
             controls.insertWidget(insert_at, widget)
             insert_at += 1
@@ -89,6 +93,9 @@ class DynamicPagesController(_BaseController):
         )
         self.response_show_f63.setText(
             self._text("显示 F₆₃%", "Show F₆₃%")
+        )
+        self.response_current_undershoot.setText(
+            self._text("计算电流下冲", "Calculate current undershoot")
         )
 
     def _reanalyze_response_threshold(self):
@@ -144,7 +151,7 @@ class DynamicPagesController(_BaseController):
             [self.response_target_speed_label, self.response_target_speeds],
             [self.response_trigger_label, self.response_trigger],
             [self.response_force_start_label, self.response_force_start_fraction],
-            [self.response_show_f1, self.response_show_f63],
+            [self.response_show_f1, self.response_show_f63, self.response_current_undershoot],
             [self.response_limit_label, self.response_t90_limit],
             [self.response_plot_mode_label, self.response_plot_mode],
             [self.response_analyze_button],
@@ -282,27 +289,49 @@ class DynamicPagesController(_BaseController):
             span = max(float(np.ptp(signal)), 0.02)
             plot.setYRange(float(np.min(signal)) - 0.24 * span, float(np.max(signal)) + 0.30 * span, padding=0)
         current.setTitle(self._text("电流", "Current") + " | " + self._localized_stage(row.get("Stage", "")) + " | " + self._localized_direction(row.get("Direction", "")), size="10pt")
+        response_type = str(row.get("Response Type", "Normal Response"))
+        if response_type == "Dip & Recovery":
+            force.setTitle(self._text("瞬态跌落-恢复型响应｜稳态力差不足，传统 t₆₃/t₉₀ 不适用", "Dip & Recovery | Classical t63/t90 not applicable"), size="10pt")
+            force_levels = [("F₀", row["F0 N"] / 1000), ("Fmin", row["Force Minimum N"] / 1000)]
+            force_markers = [("t₀", t0), ("Fmin", row["Force Minimum Time s"])]
+            recovery_ms = float(row["Force Recovery Time ms"])
+            if np.isfinite(recovery_ms):
+                force_markers.append((f"恢复 = {recovery_ms:.2f} ms", t0 + recovery_ms / 1000))
+        elif response_type == "No Response":
+            force.setTitle(self._text("无可识别阻尼力响应｜传统 t₆₃/t₉₀ 不适用", "No force response | Classical t63/t90 not applicable"), size="10pt")
+            force_levels = [("F₀", row["F0 N"] / 1000)]
+            force_markers = [("t₀", t0)]
+        else:
+            force_levels = [
+                (label, row[key] / 1000)
+                for label, key, visible in (
+                    (force_start_label, "F1 N", self.response_show_f1.isChecked()),
+                    ("F₆₃%", "F63 N", self.response_show_f63.isChecked()),
+                    ("F₉₀%", "F90 N", True),
+                    ("F₁₀₀%", "F100 N", True),
+                ) if visible and np.isfinite(row[key])
+            ]
+            force_markers = [("t₀", t0)] + [
+                (f"{label} = {row[key]:.2f} ms", t0 + row[key] / 1000)
+                for label, key, visible in (
+                    (time_start_label, "Dead Time t1 ms", self.response_show_f1.isChecked()),
+                    ("t₆₃%", "Switch Time t63 ms", self.response_show_f63.isChecked()),
+                    ("t₉₀%", "Switch Time t90 ms", True),
+                ) if visible and np.isfinite(row[key])
+            ]
+        current_levels = [("", row["Trigger Current A"]), ("I₁₀₀%", row["Current 100% A"])]
+        current_markers = [(current_trigger_label, t0)]
+        if response_type == "Dip & Recovery" and float(row.get("Current Undershoot A", 0)) > 0.01:
+            current_levels.append(("Imin", row["Current Minimum A"]))
+            current_values = data[CURRENT].to_numpy(float)
+            current_markers.append(("Imin", float(t[int(np.argmin(current_values))])))
+            settle_ms = float(row.get("Current Settling Time ms", np.nan))
+            if np.isfinite(settle_ms):
+                current_markers.append((f"稳定 = {settle_ms:.2f} ms", t0 + settle_ms / 1000))
         for plot, values, levels, markers in (
             (current, data[CURRENT].to_numpy(float),
-             [("", row["Trigger Current A"]), ("I₁₀₀%", row["Current 100% A"])],
-             [(current_trigger_label, t0)]),
-            (force, data[LOAD].to_numpy(float) / 1000,
-             [
-                 (label, row[key] / 1000)
-                 for label, key, visible in (
-                     (force_start_label, "F1 N", self.response_show_f1.isChecked()),
-                     ("F₆₃%", "F63 N", self.response_show_f63.isChecked()),
-                     ("F₉₀%", "F90 N", True),
-                     ("F₁₀₀%", "F100 N", True),
-                 )
-                 if visible
-             ],
-             [("t₀", t0)] + [(f"{label} = {row[key]:.2f} ms", t0 + row[key] / 1000)
-              for label, key, visible in (
-                  (time_start_label, "Dead Time t1 ms", self.response_show_f1.isChecked()),
-                  ("t₆₃%", "Switch Time t63 ms", self.response_show_f63.isChecked()),
-                  ("t₉₀%", "Switch Time t90 ms", True),
-              ) if visible and np.isfinite(row[key])]),
+             current_levels, current_markers),
+            (force, data[LOAD].to_numpy(float) / 1000, force_levels, force_markers),
         ):
             annotations = IntersectionLabels(plot, self.pg, self._font(), foreground, self._marker_pen())
             level_x = t[0] + (t[-1] - t[0]) * 0.015
@@ -365,8 +394,13 @@ class DynamicPagesController(_BaseController):
         self._axis_style(plot, self._text("阀电流", "Valve current"), "A")
         plot.setLabel("bottom", self._text("时间", "Time"), units="s", **{"font-size": "10pt"})
         plot.showGrid(x=True, y=True, alpha=0.15)
+        response_type = str(row.get("Response Type", "Normal Response"))
         plot.setTitle(
-            self._text("电流触发—阻尼力 F₉₀% 响应", "Current trigger–force F₉₀% response")
+            (self._text("瞬态跌落-恢复｜传统 t₉₀ 不适用", "Dip & Recovery | Classical t90 not applicable")
+             if response_type == "Dip & Recovery" else
+             self._text("无可识别阻尼力响应｜传统 t₉₀ 不适用", "No force response | Classical t90 not applicable")
+             if response_type == "No Response" else
+             self._text("电流触发—阻尼力 F₉₀% 响应", "Current trigger–force F₉₀% response"))
             + " | " + self._localized_stage(row.get("Stage", ""))
             + " | " + self._localized_direction(row.get("Direction", "")),
             size="10pt",

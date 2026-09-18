@@ -57,6 +57,43 @@ def _first_level_crossing(
     return None
 
 
+def _robust_noise(values: np.ndarray) -> float:
+    median = float(np.median(values))
+    return float(1.4826 * np.median(np.abs(values - median)))
+
+
+def _settled_time(
+    t: np.ndarray, values: np.ndarray, center: float, band: float,
+    start: float, dwell_s: float,
+) -> float:
+    """First entry into a band maintained for the full dwell interval."""
+    for idx in np.flatnonzero((t >= start) & (np.abs(values - center) <= band)):
+        end = int(np.searchsorted(t, t[idx] + dwell_s, side="left"))
+        if end < len(t) and np.all(np.abs(values[idx : end + 1] - center) <= band):
+            return float(t[idx])
+    return float("nan")
+
+
+def _first_valid_force_crossing(
+    t: np.ndarray, values: np.ndarray, threshold: float, direction: int,
+    final_force: float, band: float, dwell_s: float,
+) -> tuple[float | None, float]:
+    """Accept the first directed crossing followed promptly by a settled plateau."""
+    start = 0
+    unverified: float | None = None
+    while start < len(t) - 1:
+        crossing = _first_level_crossing(t[start:], values[start:], threshold, direction=direction)
+        if crossing is None:
+            break
+        settled = _settled_time(t, values, final_force, band, crossing, dwell_s)
+        if np.isfinite(settled) and settled - crossing <= max(3 * dwell_s, 0.03):
+            return crossing, settled
+        if t[-1] - crossing < dwell_s and unverified is None:
+            unverified = crossing
+        start = int(np.searchsorted(t, crossing, side="right"))
+    return unverified, float("nan")
+
+
 def _target_speeds(standard: ResponseStandard) -> tuple[float, ...]:
     return BMW_TARGET_SPEEDS_MPS if standard == ResponseStandard.BMW else AUDI_TARGET_SPEEDS_MPS
 
@@ -296,6 +333,10 @@ def analyze_response_time_v074(
         raise ValueError("End-average fraction must be in (0, 0.5]")
     if not 0 < target_speed_tolerance <= 0.5:
         raise ValueError("Target-speed tolerance must be in (0, 0.5]")
+    if config.force_separation_noise_factor <= 0 or config.force_separation_fraction < 0:
+        raise ValueError("Force separation thresholds must be nonnegative")
+    if config.response_dwell_s <= 0:
+        raise ValueError("Response dwell must be positive")
 
     cols = [TIME, DISP, LOAD, CURRENT]
     missing = [column for column in cols if column not in dataset.data.columns]
@@ -382,7 +423,8 @@ def analyze_response_time_v074(
             rejected_non_target += 1
             continue
 
-        force_0 = _interpolate_time(eval_t, eval_f, t0)
+        pre_force = eval_f[eval_t < t0]
+        force_0 = float(np.median(pre_force)) if len(pre_force) >= 5 else _interpolate_time(eval_t, eval_f, t0)
         x_0 = _interpolate_time(eval_t, eval_x, t0)
 
         post_mask = eval_t > t0
@@ -391,11 +433,49 @@ def analyze_response_time_v074(
             rejected_invalid += 1
             continue
         end_n = max(3, int(ceil(config.end_average_fraction * len(post_force))))
-        force_100 = float(np.mean(post_force[-end_n:]))
+        end_force = post_force[-end_n:]
+        force_100 = float(np.median(end_force))
         delta_force = force_100 - force_0
-        if abs(delta_force) < 1e-9:
-            rejected_invalid += 1
-            continue
+        noise_before = _robust_noise(pre_force) if len(pre_force) >= 5 else float("nan")
+        noise_after = _robust_noise(end_force)
+        noise = max(noise_before if np.isfinite(noise_before) else 0.0, noise_after, 1.0)
+        separation_limit = max(
+            config.force_separation_noise_factor * noise,
+            config.force_separation_fraction * max(abs(force_0), abs(force_100)),
+        )
+        classical_valid = abs(delta_force) > separation_limit
+        dip_index = int(np.argmin(post_force))
+        dip_force = float(post_force[dip_index])
+        dip_time = float(eval_t[post_mask][dip_index])
+        dip_depth = force_0 - dip_force
+        is_dip = not classical_valid and dip_depth > separation_limit
+        response_type = "Normal Response" if classical_valid else (
+            "Dip & Recovery" if is_dip else "No Response"
+        )
+        force_recovery_time = (
+            _settled_time(eval_t, eval_f, force_0,
+                          max(0.02 * abs(force_0), 3.0 * noise),
+                          dip_time, config.response_dwell_s)
+            if is_dip else float("nan")
+        )
+        dip_start = (
+            _first_level_crossing(
+                np.concatenate(([t0], eval_t[post_mask])),
+                np.concatenate(([_interpolate_time(eval_t, eval_f, t0)], post_force)),
+                force_0 - 0.1 * dip_depth, direction=-1,
+            ) if is_dip else None
+        )
+        area_end = force_recovery_time if np.isfinite(force_recovery_time) else float(eval_t[-1])
+        area_mask = (eval_t >= t0) & (eval_t <= area_end)
+        dip_area = float(np.trapezoid(np.maximum(force_0 - eval_f[area_mask], 0), eval_t[area_mask])) if is_dip else float("nan")
+        if config.calculate_current_undershoot and delta_current < 0:
+            current_min = float(np.min(currents[(ts >= t0) & (ts <= eval_t[-1])]))
+            current_undershoot = max(0.0, current_end - current_min)
+        else:
+            current_min = current_undershoot = float("nan")
+        current_settle = _settled_time(ts, currents, current_end,
+                                       max(0.02 * abs(current_end), 0.01),
+                                       t0, config.response_dwell_s)
 
         force_direction = 1 if delta_force > 0 else -1
         response_t = np.concatenate(([t0], eval_t[post_mask]))
@@ -408,8 +488,24 @@ def analyze_response_time_v074(
                 response_f,
                 target_force,
                 direction=force_direction,
+            ) if classical_valid else None
+            thresholds[fraction] = (target_force if classical_valid else float("nan"), crossing)
+
+        force_settle = float("nan")
+        if classical_valid:
+            valid_90, force_settle = _first_valid_force_crossing(
+                response_t, response_f, thresholds[0.90][0], force_direction,
+                force_100, max(0.02 * abs(force_0), 3.0 * noise),
+                config.response_dwell_s,
             )
-            thresholds[fraction] = (target_force, crossing)
+            thresholds[0.90] = (thresholds[0.90][0], valid_90)
+            start_cross = thresholds[config.force_start_fraction][1]
+            middle_cross = thresholds[0.63][1]
+            if (valid_90 is not None and start_cross is not None and middle_cross is not None
+                    and not (start_cross < middle_cross < valid_90
+                             and (not np.isfinite(force_settle) or valid_90 <= force_settle))):
+                thresholds[0.90] = (thresholds[0.90][0], None)
+                force_settle = float("nan")
 
         def elapsed_ms(crossing: float | None) -> float:
             if crossing is None or crossing < t0:
@@ -440,8 +536,12 @@ def analyze_response_time_v074(
         issues: list[str] = []
         if config.standard == ResponseStandard.AUDI and np.isfinite(sample_rate) and sample_rate < 4000.0:
             issues.append(f"sample rate below Audi 4 kHz ({sample_rate:.2f} Hz)")
-        if any(value[1] is None for value in thresholds.values()):
+        if not classical_valid:
+            issues.append("steady-state force separation insufficient; classical t63/t90 not applicable")
+        elif any(value[1] is None for value in thresholds.values()):
             issues.append("one or more force thresholds not crossed inside target-speed window")
+        elif not np.isfinite(force_settle):
+            issues.append("t90 crossing observed, but target-speed window too short to verify settling dwell")
         local_velocity = target_segment[target_segment[TIME].between(t0 - 0.003, t0 + 0.003)][VELOCITY].abs()
         if len(local_velocity) >= 3 and float(local_velocity.mean()) > 0:
             variation = float(local_velocity.std(ddof=0) / local_velocity.mean())
@@ -450,7 +550,9 @@ def analyze_response_time_v074(
 
         switch90 = elapsed_ms(t90_cross)
         trigger_reference = f"I{config.trigger_fraction * 100:g}% current crossing"
-        if config.t90_limit_ms is None:
+        if not classical_valid:
+            status = "Invalid" if not is_dip else "Warning"
+        elif config.t90_limit_ms is None:
             status = "Warning" if issues else "OK"
         elif not np.isfinite(switch90):
             status = "Invalid"
@@ -490,6 +592,22 @@ def analyze_response_time_v074(
                 "Display Start s": display_start,
                 "Display End s": display_end,
                 "Direction": direction,
+                "Response Type": response_type,
+                "Force Separation Limit N": separation_limit,
+                "Force Noise Before N": noise_before,
+                "Force Noise After N": noise_after,
+                "Force Dip N": dip_depth if is_dip else float("nan"),
+                "Force Minimum N": dip_force if is_dip else float("nan"),
+                "Force Minimum Time s": dip_time if is_dip else float("nan"),
+                "Dip Delay ms": (dip_start - t0) * 1000 if dip_start is not None else float("nan"),
+                "Time to Force Minimum ms": (dip_time - t0) * 1000 if is_dip else float("nan"),
+                "Force Recovery Time ms": (force_recovery_time - t0) * 1000 if np.isfinite(force_recovery_time) else float("nan"),
+                "Force Settling Time ms": (force_settle - t0) * 1000 if np.isfinite(force_settle) else float("nan"),
+                "Force Dip Area N s": dip_area,
+                "Current Minimum A": current_min,
+                "Current Undershoot A": current_undershoot,
+                "Current Undershoot %": 100 * current_undershoot / abs(delta_current) if delta_current < 0 else float("nan"),
+                "Current Settling Time ms": (current_settle - t0) * 1000 if np.isfinite(current_settle) else float("nan"),
                 "Force Change": "Build-up" if abs(force_100) > abs(force_0) else "Decay",
                 "F0 N": force_0,
                 "F100 N": force_100,
@@ -531,6 +649,10 @@ def analyze_response_time_v074(
             f"I{config.trigger_fraction * 100:g}% current crossing time"
         ),
         "End Average Fraction": config.end_average_fraction,
+        "Force Separation Noise Factor": config.force_separation_noise_factor,
+        "Force Separation Fraction": config.force_separation_fraction,
+        "Response Dwell ms": config.response_dwell_s * 1000,
+        "Calculate Current Undershoot": config.calculate_current_undershoot,
         "Target Speed Tolerance %": target_speed_tolerance * 100.0,
         "Target Speeds m/s": ", ".join(f"{v:g}" for v in _target_speeds(config.standard)),
         "Detected Current Events": len(candidates),

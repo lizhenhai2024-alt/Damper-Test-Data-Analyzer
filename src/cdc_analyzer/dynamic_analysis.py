@@ -42,6 +42,10 @@ class ResponseConfig:
     event_derivative_fraction: float = 0.20
     min_event_separation_s: float = 0.003
     t90_limit_ms: float | None = None
+    force_separation_noise_factor: float = 5.0
+    force_separation_fraction: float = 0.02
+    response_dwell_s: float = 0.010
+    calculate_current_undershoot: bool = False
 
 
 @dataclass(slots=True)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from . import dynamic_gui_v074 as _v074_module
 from .dynamic_gui_v074 import DynamicPagesController as _V074DynamicPagesController
 from .response_v075 import analyze_response_time_v075
@@ -35,6 +37,20 @@ class DynamicPagesController(_V074DynamicPagesController):
         "Target Speed Error %": "速度误差 / %",
         "Direction": "方向",
         "Force Change": "载荷变化",
+        "Response Type": "响应类型",
+        "Force Separation Limit N": "稳态力差门槛 / N",
+        "Force Noise Before N": "前稳态噪声 / N",
+        "Force Noise After N": "后稳态噪声 / N",
+        "Force Dip N": "阻尼力跌落 / N",
+        "Force Minimum N": "阻尼力最小值 / N",
+        "Dip Delay ms": "跌落延迟 / ms",
+        "Time to Force Minimum ms": "到最小值时间 / ms",
+        "Force Recovery Time ms": "恢复时间 / ms",
+        "Force Dip Area N s": "跌落面积 / N·s",
+        "Current Minimum A": "电流最小值 / A",
+        "Current Undershoot A": "电流下冲 / A",
+        "Current Undershoot %": "电流下冲率 / %",
+        "Current Settling Time ms": "电流稳定时间 / ms",
         "F0 N": "F0 / N",
         "F1 N": "F₁% / N",
         "F63 N": "F₆₃% / N",
@@ -101,6 +117,22 @@ class DynamicPagesController(_V074DynamicPagesController):
 
     def _fill_table(self, table, frame):
         super()._fill_table(table, frame)
+        if hasattr(self, "response_table") and table is self.response_table:
+            if "Response Type" in frame and self.window.language == "zh_CN":
+                column_index = frame.columns.get_loc("Response Type")
+                labels = {
+                    "Dip & Recovery": "瞬态跌落-恢复型响应",
+                    "No Response": "无可识别响应",
+                    "Normal Response": "常规阶跃响应",
+                }
+                for row_index, value in enumerate(frame["Response Type"]):
+                    table.item(row_index, column_index).setText(labels.get(str(value), str(value)))
+            for column in ("Switch Time t63 ms", "Switch Time t90 ms"):
+                if column in frame:
+                    column_index = frame.columns.get_loc(column)
+                    for row_index, value in enumerate(frame[column]):
+                        if pd.isna(value):
+                            table.item(row_index, column_index).setText("N/A")
         if (
             hasattr(self, "response_table")
             and table is self.response_table
