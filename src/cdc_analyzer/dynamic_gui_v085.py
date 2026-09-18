@@ -327,7 +327,7 @@ class DynamicPagesController(_BaseController):
             ]
         current_levels = [("", row["Trigger Current A"])]
         if np.isfinite(float(row["Current 100% A"])):
-            current_levels.append((f"I100% = {float(row['Current 100% A']):.3f} A", float(row["Current 100% A"])))
+            current_levels.append((f"I₁₀₀% = {float(row['Current 100% A']):.3f} A", float(row["Current 100% A"])))
         current_markers = [(current_trigger_label, t0)]
         current_values = data[CURRENT].to_numpy(float)
         overshoot_a = float(row.get("Current Overshoot A", 0))
@@ -335,8 +335,15 @@ class DynamicPagesController(_BaseController):
             extreme = float(row.get("Current Extreme A", np.nan))
             extreme_time = float(row.get("Current Extreme Time s", np.nan))
             if np.isfinite(extreme) and np.isfinite(extreme_time):
-                extreme_label = "Imax" if float(row.get("Current Delta A", 0)) >= 0 else "Imin"
-                current_levels.append((f"{extreme_label} = {extreme:.3f} A", extreme))
+                extreme_label = "Iₘₐₓ" if float(row.get("Current Delta A", 0)) >= 0 else "Iₘᵢₙ"
+                level_text = f"{extreme_label} = {extreme:.3f} A"
+                overshoot_pct = float(row.get("Current Overshoot %", np.nan))
+                if np.isfinite(overshoot_pct):
+                    level_text += self._text(
+                        f"，过冲率 = {overshoot_pct:.1f} %",
+                        f", overshoot = {overshoot_pct:.1f} %",
+                    )
+                current_levels.append((level_text, extreme))
                 current_markers.append((extreme_label, extreme_time))
             settle_ms = float(row.get("Current Settling Time ms", np.nan))
             if np.isfinite(settle_ms):
