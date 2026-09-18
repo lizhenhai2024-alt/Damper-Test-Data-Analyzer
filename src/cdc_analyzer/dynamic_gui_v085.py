@@ -338,7 +338,7 @@ class DynamicPagesController(_BaseController):
                 extreme_label = "Iₘₐₓ" if float(row.get("Current Delta A", 0)) >= 0 else "Iₘᵢₙ"
                 level_text = f"{extreme_label} = {extreme:.3f} A"
                 overshoot_pct = float(row.get("Current Overshoot %", np.nan))
-                if np.isfinite(overshoot_pct):
+                if np.isfinite(overshoot_pct) and overshoot_pct > 10.0:
                     level_text += self._text(
                         f"，过冲率 = {overshoot_pct:.1f} %",
                         f", overshoot = {overshoot_pct:.1f} %",
