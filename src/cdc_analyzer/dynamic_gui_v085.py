@@ -302,7 +302,10 @@ class DynamicPagesController(_BaseController):
             force_markers = [("t₀", t0), ("Fmin", row["Force Minimum Time s"])]
             recovery_ms = float(row["Force Recovery Time ms"])
             if np.isfinite(recovery_ms):
-                force_markers.append((f"恢复 = {recovery_ms:.2f} ms", t0 + recovery_ms / 1000))
+                force_markers.append((
+                    self._text(f"恢复 = {recovery_ms:.2f} ms", f"Recovery = {recovery_ms:.2f} ms"),
+                    t0 + recovery_ms / 1000,
+                ))
         elif response_type == "No Response":
             force.setTitle(self._text("无可识别阻尼力响应｜传统 t₆₃/t₉₀ 不适用", "No force response | Classical t63/t90 not applicable"), size="10pt")
             force_levels = [("F₀", row["F0 N"] / 1000)]
@@ -347,7 +350,10 @@ class DynamicPagesController(_BaseController):
                 current_markers.append((extreme_label, extreme_time))
             settle_ms = float(row.get("Current Settling Time ms", np.nan))
             if np.isfinite(settle_ms):
-                current_markers.append((f"稳定 = {settle_ms:.2f} ms", t0 + settle_ms / 1000))
+                current_markers.append((
+                    self._text(f"稳定 = {settle_ms:.2f} ms", f"Stable = {settle_ms:.2f} ms"),
+                    t0 + settle_ms / 1000,
+                ))
         for plot, values, levels, markers in (
             (current, data[CURRENT].to_numpy(float),
              current_levels, current_markers),
