@@ -53,6 +53,11 @@ class DynamicPagesController(_BaseController):
         self.response_current_undershoot = QtWidgets.QCheckBox()
         self.response_current_undershoot.setChecked(False)
         self.response_current_undershoot.toggled.connect(self._reanalyze_response_threshold)
+        self.response_show_current_excursion = QtWidgets.QCheckBox()
+        self.response_show_current_excursion.setChecked(True)
+        self.response_show_current_excursion.setEnabled(False)
+        self.response_current_undershoot.toggled.connect(self.response_show_current_excursion.setEnabled)
+        self.response_show_current_excursion.toggled.connect(self.refresh_response_plot)
         self.response_show_f1.toggled.connect(self.refresh_response_plot)
         self.response_show_f63.toggled.connect(self.refresh_response_plot)
         self.response_force_start_fraction.valueChanged.connect(
@@ -75,6 +80,7 @@ class DynamicPagesController(_BaseController):
             self.response_show_f1,
             self.response_show_f63,
             self.response_current_undershoot,
+            self.response_show_current_excursion,
         ):
             controls.insertWidget(insert_at, widget)
             insert_at += 1
@@ -95,7 +101,10 @@ class DynamicPagesController(_BaseController):
             self._text("显示 F₆₃%", "Show F₆₃%")
         )
         self.response_current_undershoot.setText(
-            self._text("计算电流下冲", "Calculate current undershoot")
+            self._text("计算电流过冲/下冲", "Calculate current overshoot/undershoot")
+        )
+        self.response_show_current_excursion.setText(
+            self._text("显示电流过冲/下冲率", "Show current overshoot/undershoot %")
         )
 
     def _reanalyze_response_threshold(self):
@@ -151,7 +160,7 @@ class DynamicPagesController(_BaseController):
             [self.response_target_speed_label, self.response_target_speeds],
             [self.response_trigger_label, self.response_trigger],
             [self.response_force_start_label, self.response_force_start_fraction],
-            [self.response_show_f1, self.response_show_f63, self.response_current_undershoot],
+            [self.response_show_f1, self.response_show_f63, self.response_current_undershoot, self.response_show_current_excursion],
             [self.response_limit_label, self.response_t90_limit],
             [self.response_plot_mode_label, self.response_plot_mode],
             [self.response_analyze_button],
@@ -321,10 +330,18 @@ class DynamicPagesController(_BaseController):
             ]
         current_levels = [("", row["Trigger Current A"]), ("I₁₀₀%", row["Current 100% A"])]
         current_markers = [(current_trigger_label, t0)]
-        if response_type == "Dip & Recovery" and float(row.get("Current Undershoot A", 0)) > 0.01:
-            current_levels.append(("Imin", row["Current Minimum A"]))
+        if self.response_current_undershoot.isChecked() and self.response_show_current_excursion.isChecked():
             current_values = data[CURRENT].to_numpy(float)
-            current_markers.append(("Imin", float(t[int(np.argmin(current_values))])))
+            post_indices = np.flatnonzero(t >= t0)
+            if len(post_indices):
+                falling = float(row["Current Delta A"]) < 0
+                percent_key = "Current Undershoot %" if falling else "Current Overshoot %"
+                percent = float(row.get(percent_key, np.nan))
+                if np.isfinite(percent) and percent > 0:
+                    index = int(post_indices[np.argmin(current_values[post_indices]) if falling else np.argmax(current_values[post_indices])])
+                    label = self._text("下冲", "Undershoot") if falling else self._text("过冲", "Overshoot")
+                    current_markers.append((f"{label} = {percent:.2f}%", float(t[index])))
+        if response_type == "Dip & Recovery" and float(row.get("Current Undershoot A", 0)) > 0.01:
             settle_ms = float(row.get("Current Settling Time ms", np.nan))
             if np.isfinite(settle_ms):
                 current_markers.append((f"稳定 = {settle_ms:.2f} ms", t0 + settle_ms / 1000))

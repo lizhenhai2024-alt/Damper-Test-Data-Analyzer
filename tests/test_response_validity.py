@@ -85,3 +85,13 @@ def test_short_spike_does_not_become_valid_t90_crossing():
     )
     assert crossing is not None and 0.043 < crossing < 0.046
     assert np.isfinite(settled) and settled > crossing
+
+
+def test_sustained_slow_force_ramp_has_valid_t90_before_final_settling():
+    t = np.arange(0.0, 0.200, 0.001)
+    force = np.minimum(t / 0.100, 1.0)
+    crossing, settled = _first_valid_force_crossing(
+        t, force, 0.9, 1, 1.0, 0.01, 0.010,
+    )
+    assert crossing is not None and 0.089 < crossing < 0.091
+    assert np.isfinite(settled) and settled > crossing

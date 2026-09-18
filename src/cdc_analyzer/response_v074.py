@@ -78,7 +78,7 @@ def _first_valid_force_crossing(
     t: np.ndarray, values: np.ndarray, threshold: float, direction: int,
     final_force: float, band: float, dwell_s: float,
 ) -> tuple[float | None, float]:
-    """Accept the first directed crossing followed promptly by a settled plateau."""
+    """Accept a directed F90 crossing sustained for the required dwell."""
     start = 0
     unverified: float | None = None
     while start < len(t) - 1:
@@ -86,8 +86,12 @@ def _first_valid_force_crossing(
         if crossing is None:
             break
         settled = _settled_time(t, values, final_force, band, crossing, dwell_s)
-        if np.isfinite(settled) and settled - crossing <= max(3 * dwell_s, 0.03):
-            return crossing, settled
+        dwell_end = crossing + dwell_s
+        if dwell_end <= t[-1]:
+            dwell_values = values[(t > crossing) & (t < dwell_end)]
+            dwell_values = np.concatenate((dwell_values, [np.interp(dwell_end, t, values)]))
+            if np.all(direction * (dwell_values - threshold) >= -band):
+                return crossing, settled
         if t[-1] - crossing < dwell_s and unverified is None:
             unverified = crossing
         start = int(np.searchsorted(t, crossing, side="right"))
@@ -468,11 +472,15 @@ def analyze_response_time_v074(
         area_end = force_recovery_time if np.isfinite(force_recovery_time) else float(eval_t[-1])
         area_mask = (eval_t >= t0) & (eval_t <= area_end)
         dip_area = float(np.trapezoid(np.maximum(force_0 - eval_f[area_mask], 0), eval_t[area_mask])) if is_dip else float("nan")
-        if config.calculate_current_undershoot and delta_current < 0:
-            current_min = float(np.min(currents[(ts >= t0) & (ts <= eval_t[-1])]))
-            current_undershoot = max(0.0, current_end - current_min)
-        else:
-            current_min = current_undershoot = float("nan")
+        current_min = current_undershoot = current_max = current_overshoot = float("nan")
+        if config.calculate_current_undershoot:
+            response_current = currents[(ts >= t0) & (ts <= eval_t[-1])]
+            if delta_current < 0:
+                current_min = float(np.min(response_current))
+                current_undershoot = max(0.0, current_end - current_min)
+            else:
+                current_max = float(np.max(response_current))
+                current_overshoot = max(0.0, current_max - current_end)
         current_settle = _settled_time(ts, currents, current_end,
                                        max(0.02 * abs(current_end), 0.01),
                                        t0, config.response_dwell_s)
@@ -607,6 +615,9 @@ def analyze_response_time_v074(
                 "Current Minimum A": current_min,
                 "Current Undershoot A": current_undershoot,
                 "Current Undershoot %": 100 * current_undershoot / abs(delta_current) if delta_current < 0 else float("nan"),
+                "Current Maximum A": current_max,
+                "Current Overshoot A": current_overshoot,
+                "Current Overshoot %": 100 * current_overshoot / abs(delta_current) if delta_current > 0 else float("nan"),
                 "Current Settling Time ms": (current_settle - t0) * 1000 if np.isfinite(current_settle) else float("nan"),
                 "Force Change": "Build-up" if abs(force_100) > abs(force_0) else "Decay",
                 "F0 N": force_0,
