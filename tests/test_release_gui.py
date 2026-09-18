@@ -30,6 +30,8 @@ def test_release_ui_defaults_and_professional_controls():
 
     assert window.help_button.text() == "帮助 / 使用说明"
     assert window.tabs.tabText(window.tabs.indexOf(window.help_page)) == "专业帮助"
+    assert f"{PRODUCT_NAME} V{__version__}" in window.help_browser.toPlainText()
+    assert "— 专业帮助" not in window.help_browser.toPlainText()
     assert "Audi" in window.help_browser.toPlainText()
     assert "窗口基准固定为总行程全宽" in window.help_browser.toPlainText()
     assert COMPANY_ZH in window.help_browser.toPlainText()

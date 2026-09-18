@@ -35,12 +35,14 @@ def test_v079_hides_end_average_and_shows_unset_t90_limit():
 
 
 def test_v079_help_title_drops_professional_help_suffix():
+    from cdc_analyzer import __version__
     from cdc_analyzer.gui_release_v079 import _release_help_html_v079
+    from cdc_analyzer.product_info import PRODUCT_NAME
 
     zh = _release_help_html_v079("zh_CN")
     en = _release_help_html_v079("en_US")
 
     assert "Damper Test Data Analyzer — 专业帮助" not in zh
     assert "Damper Test Data Analyzer — Professional Help" not in en
-    assert "<h1>Damper Test Data Analyzer</h1>" in zh
-    assert "<h1>Damper Test Data Analyzer</h1>" in en
+    assert f"<h1>{PRODUCT_NAME} V{__version__}</h1>" in zh
+    assert f"<h1>{PRODUCT_NAME} V{__version__}</h1>" in en

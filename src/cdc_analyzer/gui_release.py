@@ -27,7 +27,7 @@ def _release_help_html(language: str) -> str:
     base = _help_html(language)
     if language == "zh_CN":
         old_title = "CDC 零位阻尼力分析器 — 专业帮助"
-        new_title = f"{PRODUCT_NAME} — 专业帮助"
+        new_title = f"{PRODUCT_NAME} V{__version__}"
         release_box = f"""
         <div style="margin:8px 0 18px 0;padding:12px 14px;border:1px solid #bdbdbd;background:#f7f7f7;">
           <b>{html.escape(COMPANY_ZH)}</b><br>
@@ -73,7 +73,7 @@ def _release_help_html(language: str) -> str:
         """
     else:
         old_title = "CDC Zero Position Force Analyzer — Professional Help"
-        new_title = f"{PRODUCT_NAME} — Professional Help"
+        new_title = f"{PRODUCT_NAME} V{__version__}"
         release_box = f"""
         <div style="margin:8px 0 18px 0;padding:12px 14px;border:1px solid #bdbdbd;background:#f7f7f7;">
           <b>{html.escape(COMPANY_EN)}</b><br>
