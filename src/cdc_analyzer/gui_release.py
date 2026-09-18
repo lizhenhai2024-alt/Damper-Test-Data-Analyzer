@@ -48,6 +48,16 @@ def _release_help_html(language: str) -> str:
           <li><b>图形标注：</b>起始载荷阈值默认 1% 并可调整，F 与 t 的下标同步使用设置值。F 起始阈值和 F₆₃% 可分别勾选显示；取消后对应参考线、交点和时间文字同步隐藏。文字为透明背景、正常字重，与坐标轴标题同为 10 pt。</li>
           <li><b>双 Y 轴阻尼力响应：</b>X 轴为时间，左侧蓝色轴与曲线表示电流，右侧红色轴与曲线表示阻尼力。两条竖虚线标记电流 I₁₀% 和阻尼力 F₉₀% 的线性插值时刻。电流曲线只显示 I₁₀% 交点，不显示 F₉₀% 时刻的电流交点和文字；阻尼力曲线显示两个时刻的交点。主响应时间为 t(F₉₀%) − t(I₁₀%)，与三联图一致。</li>
           <li><b>计算电流过冲：</b>勾选项默认开启；对电流过冲（上升超过终值）或电流下冲（下降低于终值）引起的瞬态力跌落进行识别。图中在电流曲线上标注 Iₘₐₓ= / Iₘᵢₙ= 电流极值（过冲率 &gt;10% 时附标注）与 I₁₀₀%= 电流满幅值。当响应被分类为“瞬态跌落-恢复型（Dip &amp; Recovery）”时，稳态力差不足，传统 t₆₃% / t₉₀% 不适用；图中明确标注并在计时上做门控处理，避免把瞬态跌落误判为真实响应时间。</li>
+          <li><b>稳定时间与恢复时间（严格区分，勿混用）：</b>二者描述不同物理过程，软件按下列定义分别计算，报告自动打印算法定义以保证结果可复现。
+          <ul>
+            <li><b>响应起点：</b>t₀ = t(I₁₀%)，即电流触发交点时刻，所有时间差均以此为基准或显式起算。</li>
+            <li><b>稳定时间 Settling Time：</b>信号经阶跃/过冲/下冲后，进入目标稳态允许带并持续保持所需时间。目标电流 I_tar 为阶跃终值；稳定带默认 I_tar ± 2%（可配置）。判据是“进入 + 持续保持”，不是“第一次进入”：在带内连续保持默认 10 ms（dwell，可配置）才认定为稳定。若波形第一次经过目标值后继续掉到 0.7 A，绝不能算已稳定。T_settle,I = t_settle − t(I₁₀%)。</li>
+            <li><b>恢复时间 Recovery Time：</b>仅用于 Dip &amp; Recovery 波形（F₀→F_min→F₀）。事件前基准阻尼力 F_base = median(F_pre)；恢复带 Band_F = max(2%·|F_base|, 3σ_F, Band_abs)。力从最低点恢复后，第一次重新进入恢复带并连续保持 10 ms 的时刻为 t_recover。T_recovery = t_recover − t(F_min)，即从异常最低点恢复到重新稳定所需时间。</li>
+            <li><b>总瞬态时间 Total Transient Time：</b>T_transient = t_recover − t(I₁₀%)，从电流开始有效变化到阻尼力完全恢复的总持续时间。</li>
+            <li><b>三者关系（示例 t(I₁₀%)=0、t(F_min)=8 ms、t_recover=24 ms）：</b>到最低点 T_to_min = 8 ms（跌落形成过程）；恢复 T_recovery = 24−8 = 16 ms（恢复过程）；总瞬态 T_transient = 24 ms（整个异常瞬态）。电流波形同构：t(I_min)、T_I,recovery = t(I,settle) − t(I_min)、T_I,settle = t(I,settle) − t(I₁₀%)，且 T_settling = T_to_extreme + T_recovery。</li>
+            <li><b>适用性：</b>正常单调阶跃（F₀→F∞）一般只需稳定时间，不需要恢复时间；Dip &amp; Recovery 波形（F₀→F_min→F₀）用恢复时间 + 总瞬态时间比传统 t₆₃% / t₉₀% 更有意义。</li>
+            <li><b>默认稳定判据：</b>不要求“此后永远不出带”（测试数据可能很长），采用固定 dwell——连续 10 ms 在带内即认定 stable / recovered。电流稳定带默认 ±2% 目标值；力恢复带默认 max(±2% 基准, ±3σ 噪声)；dwell 默认 10 ms。全部可配置；报告自动打印算法定义，客户可直接复核“这个 24 ms 怎么来的”。</li>
+          </ul></li>
           <li>若未输入客户 t₉₀% 限值，只报告测量值，不自动判定 PASS/FAIL。</li>
         </ul>
         <p><b>显示缩放：</b>使用 Qt 自动 DPI 缩放，支持 100% / 150%。工具栏自动换行；较小屏幕可滚动查看完整响应图，字体不会被二次放大或裁切。</p>
@@ -84,6 +94,16 @@ def _release_help_html(language: str) -> str:
           <li><b>Plot labels:</b>The initial force threshold defaults to 1% and is adjustable; the F and t subscripts follow its setting. The initial F threshold and F₆₃% can be shown independently. Clearing either option hides its guides, intersection and time label together. Labels use transparent, normal-weight 10 pt text.</li>
           <li><b>Dual-axis damping response:</b>Time is the X axis. The blue left axis and curve show current; the red right axis and curve show damping force. Two vertical dashed guides mark the linearly interpolated current I₁₀% and force F₉₀% times. The current curve shows only the I₁₀% intersection; its point and text at the F₉₀% time are hidden. The force curve retains both intersections. The primary result is t(F₉₀%) − t(I₁₀%), matching the three-panel plot.</li>
           <li><b>Current overshoot:</b> enabled by default; transient force dips caused by current overshoot (rise above target) or undershoot (fall below target) are detected. The current trace is annotated with Iₘₐₓ= / Iₘᵢₙ= extremes (overshoot % shown when &gt;10%) and the I₁₀₀%= full-scale level. If the response is classified as Dip &amp; Recovery, the steady-state force gap is insufficient and classical t₆₃% / t₉₀% do not apply. The plot annotates this and gates the response timing so a transient dip is not mistaken for the true response time.</li>
+          <li><b>Settling vs Recovery Time (keep strictly separate):</b> they describe different physical processes; the software computes them with the definitions below and prints the algorithm definition in the report so every result is reproducible.
+          <ul>
+            <li><b>Response start:</b> t₀ = t(I₁₀%), the current-trigger intersection. Every time difference starts from this reference or from an explicitly stated event.</li>
+            <li><b>Settling Time:</b> after a step with overshoot/undershoot, the time needed to enter the target steady-state tolerance band and stay there. Target current I_tar is the step endpoint; the settling band defaults to I_tar ± 2% (configurable). The criterion is “enter + stay”, not “first entry”: the signal must remain inside the band for a continuous dwell of 10 ms (configurable) before it counts as settled. If the waveform passes the target value once and then drops to 0.7 A, it is absolutely not settled. T_settle,I = t_settle − t(I₁₀%).</li>
+            <li><b>Recovery Time:</b> reserved for Dip &amp; Recovery waveforms (F₀→F_min→F₀). Baseline force F_base = median(F_pre); recovery band Band_F = max(2%·|F_base|, 3σ_F, Band_abs). After the force starts recovering from its minimum, t_recover is the first time it re-enters the recovery band and stays for 10 ms. T_recovery = t_recover − t(F_min): from the abnormal minimum back to stability.</li>
+            <li><b>Total Transient Time:</b> T_transient = t_recover − t(I₁₀%), the full duration from the effective current change until the damping force has fully recovered.</li>
+            <li><b>Relationship (example t(I₁₀%)=0, t(F_min)=8 ms, t_recover=24 ms):</b> time to minimum T_to_min = 8 ms (dip formation); T_recovery = 24−8 = 16 ms (recovery); T_transient = 24 ms (whole transient). The current waveform uses the same structure: t(I_min), T_I,recovery = t(I,settle) − t(I_min), T_I,settle = t(I,settle) − t(I₁₀%), with T_settling = T_to_extreme + T_recovery.</li>
+            <li><b>Applicability:</b> a normal monotonic step (F₀→F∞) generally only needs settling time, not recovery time. For Dip &amp; Recovery (F₀→F_min→F₀), recovery time + total transient time are more meaningful than classical t₆₃% / t₉₀%.</li>
+            <li><b>Default stability criterion:</b> a fixed dwell instead of “never leaves the band afterwards” (records can be long) — 10 ms continuously inside the band marks the signal stable/recovered. Current settling band: ±2% of target; force recovery band: max(±2% of baseline, ±3σ noise); dwell: 10 ms. All configurable; the report prints the algorithm definition so a customer can verify where a reported value (e.g. 24 ms) comes from.</li>
+          </ul></li>
           <li>No PASS/FAIL is assigned without an entered project t₉₀% limit.</li>
         </ul>
         <p>Qt handles 100% / 150% display scaling. Controls wrap and the full response graph remains scrollable on smaller displays.</p>
