@@ -45,6 +45,9 @@ class ResponseConfig:
     force_separation_noise_factor: float = 5.0
     force_separation_fraction: float = 0.02
     response_dwell_s: float = 0.010
+    current_settling_band_fraction: float = 0.02
+    force_recovery_band_fraction: float = 0.02
+    force_recovery_sigma_factor: float = 3.0
     calculate_current_overshoot: bool = False
 
 

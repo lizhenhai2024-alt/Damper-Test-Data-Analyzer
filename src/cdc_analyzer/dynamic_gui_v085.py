@@ -53,6 +53,46 @@ class DynamicPagesController(_BaseController):
         self.response_current_undershoot = QtWidgets.QCheckBox()
         self.response_current_undershoot.setChecked(True)
         self.response_current_undershoot.toggled.connect(self._reanalyze_response_threshold)
+
+        self.response_settling_band_label = QtWidgets.QLabel()
+        self.response_settling_band_pct = QtWidgets.QDoubleSpinBox()
+        self.response_settling_band_pct.setRange(0.1, 20.0)
+        self.response_settling_band_pct.setDecimals(1)
+        self.response_settling_band_pct.setSingleStep(0.5)
+        self.response_settling_band_pct.setValue(2.0)
+        self.response_settling_band_pct.setSuffix(" %")
+        self.response_settling_band_pct.setMaximumWidth(105)
+        self.response_settling_band_pct.editingFinished.connect(self._reanalyze_response_threshold)
+
+        self.response_recovery_band_label = QtWidgets.QLabel()
+        self.response_recovery_band_pct = QtWidgets.QDoubleSpinBox()
+        self.response_recovery_band_pct.setRange(0.1, 20.0)
+        self.response_recovery_band_pct.setDecimals(1)
+        self.response_recovery_band_pct.setSingleStep(0.5)
+        self.response_recovery_band_pct.setValue(2.0)
+        self.response_recovery_band_pct.setSuffix(" %")
+        self.response_recovery_band_pct.setMaximumWidth(105)
+        self.response_recovery_band_pct.editingFinished.connect(self._reanalyze_response_threshold)
+
+        self.response_recovery_sigma_label = QtWidgets.QLabel()
+        self.response_recovery_sigma = QtWidgets.QDoubleSpinBox()
+        self.response_recovery_sigma.setRange(1.0, 10.0)
+        self.response_recovery_sigma.setDecimals(1)
+        self.response_recovery_sigma.setSingleStep(0.5)
+        self.response_recovery_sigma.setValue(3.0)
+        self.response_recovery_sigma.setMaximumWidth(105)
+        self.response_recovery_sigma.editingFinished.connect(self._reanalyze_response_threshold)
+
+        self.response_dwell_label = QtWidgets.QLabel()
+        self.response_dwell_ms = QtWidgets.QDoubleSpinBox()
+        self.response_dwell_ms.setRange(1.0, 1000.0)
+        self.response_dwell_ms.setDecimals(1)
+        self.response_dwell_ms.setSingleStep(1.0)
+        self.response_dwell_ms.setValue(10.0)
+        self.response_dwell_ms.setSuffix(" ms")
+        self.response_dwell_ms.setMaximumWidth(105)
+        self.response_dwell_ms.editingFinished.connect(self._reanalyze_response_threshold)
+
         self.response_show_f1.toggled.connect(self.refresh_response_plot)
         self.response_show_f63.toggled.connect(self.refresh_response_plot)
         self.response_force_start_fraction.valueChanged.connect(
@@ -75,6 +115,14 @@ class DynamicPagesController(_BaseController):
             self.response_show_f1,
             self.response_show_f63,
             self.response_current_undershoot,
+            self.response_settling_band_label,
+            self.response_settling_band_pct,
+            self.response_recovery_band_label,
+            self.response_recovery_band_pct,
+            self.response_recovery_sigma_label,
+            self.response_recovery_sigma,
+            self.response_dwell_label,
+            self.response_dwell_ms,
         ):
             controls.insertWidget(insert_at, widget)
             insert_at += 1
@@ -96,6 +144,18 @@ class DynamicPagesController(_BaseController):
         )
         self.response_current_undershoot.setText(
             self._text("计算电流过冲", "Calculate current overshoot")
+        )
+        self.response_settling_band_label.setText(
+            self._text("电流稳定带 ±", "Current settling band ±")
+        )
+        self.response_recovery_band_label.setText(
+            self._text("力恢复带 ±", "Force recovery band ±")
+        )
+        self.response_recovery_sigma_label.setText(
+            self._text("力恢复σ系数", "Force recovery σ factor")
+        )
+        self.response_dwell_label.setText(
+            self._text("稳定保持", "Dwell")
         )
 
     def _reanalyze_response_threshold(self):
@@ -158,6 +218,10 @@ class DynamicPagesController(_BaseController):
             [self.response_trigger_label, self.response_trigger],
             [self.response_force_start_label, self.response_force_start_fraction],
             [self.response_show_f1, self.response_show_f63, self.response_current_undershoot],
+            [self.response_settling_band_label, self.response_settling_band_pct,
+             self.response_recovery_band_label, self.response_recovery_band_pct],
+            [self.response_recovery_sigma_label, self.response_recovery_sigma,
+             self.response_dwell_label, self.response_dwell_ms],
             [self.response_limit_label, self.response_t90_limit],
             [self.response_plot_mode_label, self.response_plot_mode],
             [self.response_analyze_button],
@@ -304,7 +368,7 @@ class DynamicPagesController(_BaseController):
             if np.isfinite(recovery_ms):
                 force_markers.append((
                     self._text(f"恢复 = {recovery_ms:.2f} ms", f"Recovery = {recovery_ms:.2f} ms"),
-                    t0 + recovery_ms / 1000,
+                    float(row["Force Minimum Time s"]) + recovery_ms / 1000,
                 ))
         elif response_type == "No Response":
             force.setTitle(self._text("无可识别阻尼力响应｜传统 t₆₃/t₉₀ 不适用", "No force response | Classical t63/t90 not applicable"), size="10pt")

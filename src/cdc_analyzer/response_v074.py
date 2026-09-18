@@ -453,9 +453,12 @@ def analyze_response_time_v074(
             "Dip & Recovery" if is_dip else "No Response"
         )
         force_recovery_time = (
-            _settled_time(eval_t, eval_f, force_0,
-                          max(0.02 * abs(force_0), 3.0 * noise),
-                          dip_time, config.response_dwell_s)
+            _settled_time(
+                eval_t, eval_f, force_0,
+                max(config.force_recovery_band_fraction * abs(force_0),
+                    config.force_recovery_sigma_factor * noise),
+                dip_time, config.response_dwell_s,
+            )
             if is_dip else float("nan")
         )
         dip_start = (
@@ -485,9 +488,11 @@ def analyze_response_time_v074(
             current_max = current_min = current_overshoot = float("nan")
             current_extreme = float("nan")
             extreme_time = float("nan")
-        current_settle = _settled_time(ts, currents, current_end,
-                                       max(0.02 * abs(current_end), 0.01),
-                                       t0, config.response_dwell_s)
+        current_settle = _settled_time(
+            ts, currents, current_end,
+            max(config.current_settling_band_fraction * abs(current_end), 0.01),
+            t0, config.response_dwell_s,
+        )
 
         force_direction = 1 if delta_force > 0 else -1
         response_t = np.concatenate(([t0], eval_t[post_mask]))
@@ -507,7 +512,9 @@ def analyze_response_time_v074(
         if classical_valid:
             valid_90, force_settle = _first_valid_force_crossing(
                 response_t, response_f, thresholds[0.90][0], force_direction,
-                force_100, max(0.02 * abs(force_0), 3.0 * noise),
+                force_100,
+                max(config.force_recovery_band_fraction * abs(force_0),
+                    config.force_recovery_sigma_factor * noise),
                 config.response_dwell_s,
             )
             thresholds[0.90] = (thresholds[0.90][0], valid_90)
@@ -613,7 +620,8 @@ def analyze_response_time_v074(
                 "Force Minimum Time s": dip_time if is_dip else float("nan"),
                 "Dip Delay ms": (dip_start - t0) * 1000 if dip_start is not None else float("nan"),
                 "Time to Force Minimum ms": (dip_time - t0) * 1000 if is_dip else float("nan"),
-                "Force Recovery Time ms": (force_recovery_time - t0) * 1000 if np.isfinite(force_recovery_time) else float("nan"),
+                "Force Recovery Time ms": (force_recovery_time - dip_time) * 1000 if np.isfinite(force_recovery_time) else float("nan"),
+                "Total Transient Time ms": (force_recovery_time - t0) * 1000 if np.isfinite(force_recovery_time) else float("nan"),
                 "Force Settling Time ms": (force_settle - t0) * 1000 if np.isfinite(force_settle) else float("nan"),
                 "Force Dip Area N s": dip_area,
                 "Current Maximum A": current_max,
@@ -622,6 +630,12 @@ def analyze_response_time_v074(
                 "Current Overshoot %": 100 * current_overshoot / abs(delta_current) if np.isfinite(current_overshoot) else float("nan"),
                 "Current Extreme A": current_extreme,
                 "Current Extreme Time s": extreme_time,
+                "Current Time to Extreme ms": (extreme_time - t0) * 1000 if np.isfinite(extreme_time) else float("nan"),
+                "Current Recovery Time ms": (
+                    (current_settle - extreme_time) * 1000
+                    if np.isfinite(current_settle) and np.isfinite(extreme_time)
+                    and current_settle >= extreme_time else float("nan")
+                ),
                 "Current Settling Time ms": (current_settle - t0) * 1000 if np.isfinite(current_settle) else float("nan"),
                 "Force Change": "Build-up" if abs(force_100) > abs(force_0) else "Decay",
                 "F0 N": force_0,
@@ -667,7 +681,19 @@ def analyze_response_time_v074(
         "Force Separation Noise Factor": config.force_separation_noise_factor,
         "Force Separation Fraction": config.force_separation_fraction,
         "Response Dwell ms": config.response_dwell_s * 1000,
+        "Current Settling Band %": config.current_settling_band_fraction * 100,
+        "Force Recovery Band %": config.force_recovery_band_fraction * 100,
+        "Force Recovery Sigma Factor": config.force_recovery_sigma_factor,
         "Calculate Current Overshoot": config.calculate_current_overshoot,
+        "Settling Definition": (
+            "T_settle,I = t_settle - t(I10%); settle band = I_tar +/- 2% (configurable); "
+            "signal must stay inside the band for the full dwell (10 ms default) to count as settled."
+        ),
+        "Recovery Definition": (
+            "T_recovery = t_recover - t(F_min); recovery band = max(2% |F_base|, 3 sigma) "
+            "(configurable); first re-entry into the band held for the full dwell after the force minimum."
+        ),
+        "Total Transient Definition": "T_transient = t_recover - t(I10%), reported for Dip & Recovery only.",
         "Target Speed Tolerance %": target_speed_tolerance * 100.0,
         "Target Speeds m/s": ", ".join(f"{v:g}" for v in _target_speeds(config.standard)),
         "Detected Current Events": len(candidates),

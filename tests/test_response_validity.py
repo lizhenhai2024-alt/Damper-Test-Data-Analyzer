@@ -35,7 +35,12 @@ def test_dip_and_recovery_does_not_report_classical_timing():
     assert 400 < row["Force Dip N"] < 450
     assert row["Force Dip Area N s"] > 0
     assert row["Time to Force Minimum ms"] > 0
-    assert row["Force Recovery Time ms"] > row["Time to Force Minimum ms"]
+    assert row["Force Recovery Time ms"] > 0
+    assert row["Total Transient Time ms"] > row["Time to Force Minimum ms"]
+    assert np.isclose(
+        row["Total Transient Time ms"],
+        row["Time to Force Minimum ms"] + row["Force Recovery Time ms"],
+    )
     assert np.isnan(row["Current Overshoot A"])
     enabled = analyze_response_time_v074(
         DataSet(frame, Path("dip.dat"), "synthetic"),

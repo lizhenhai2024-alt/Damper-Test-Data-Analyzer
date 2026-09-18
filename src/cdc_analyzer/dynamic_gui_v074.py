@@ -86,6 +86,22 @@ class DynamicPagesController(_BaseDynamicPagesController):
                 ),
                 end_average_fraction=self.response_end_fraction.value() / 100.0,
                 t90_limit_ms=limit,
+                response_dwell_s=(
+                    self.response_dwell_ms.value() / 1000.0
+                    if hasattr(self, "response_dwell_ms") else 0.010
+                ),
+                current_settling_band_fraction=(
+                    self.response_settling_band_pct.value() / 100.0
+                    if hasattr(self, "response_settling_band_pct") else 0.02
+                ),
+                force_recovery_band_fraction=(
+                    self.response_recovery_band_pct.value() / 100.0
+                    if hasattr(self, "response_recovery_band_pct") else 0.02
+                ),
+                force_recovery_sigma_factor=(
+                    self.response_recovery_sigma.value()
+                    if hasattr(self, "response_recovery_sigma") else 3.0
+                ),
                 calculate_current_overshoot=(
                     self.response_current_undershoot.isChecked()
                     if hasattr(self, "response_current_undershoot") else False
