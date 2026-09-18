@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from . import dynamic_gui_v074 as _v074_module
 from .dynamic_gui_v074 import DynamicPagesController as _V074DynamicPagesController
 from .response_v075 import analyze_response_time_v075
@@ -35,6 +37,23 @@ class DynamicPagesController(_V074DynamicPagesController):
         "Target Speed Error %": "速度误差 / %",
         "Direction": "方向",
         "Force Change": "载荷变化",
+        "Response Type": "响应类型",
+        "Force Separation Limit N": "稳态力差门槛 / N",
+        "Force Noise Before N": "前稳态噪声 / N",
+        "Force Noise After N": "后稳态噪声 / N",
+        "Force Dip N": "阻尼力跌落 / N",
+        "Force Minimum N": "阻尼力最小值 / N",
+        "Dip Delay ms": "跌落延迟 / ms",
+        "Time to Force Minimum ms": "到最小值时间 / ms",
+        "Force Recovery Time ms": "恢复时间 / ms",
+        "Force Dip Area N s": "跌落面积 / N·s",
+        "Current Minimum A": "电流最小值 / A",
+        "Current Undershoot A": "电流下冲 / A",
+        "Current Undershoot %": "电流下冲率 / %",
+        "Current Maximum A": "电流最大值 / A",
+        "Current Overshoot A": "电流过冲 / A",
+        "Current Overshoot %": "电流过冲率 / %",
+        "Current Settling Time ms": "电流稳定时间 / ms",
         "F0 N": "F0 / N",
         "F1 N": "F₁% / N",
         "F63 N": "F₆₃% / N",
@@ -49,6 +68,29 @@ class DynamicPagesController(_V074DynamicPagesController):
         "Sample Rate Hz": "采样率 / Hz",
         "Status": "状态",
         "Issues": "数据提示",
+        "I10 Crossing Time s": "I₁₀% 交点时间 / s",
+        "Trigger Crossing Time s": "触发交点时间 / s",
+        "F1 Crossing Time s": "F₁% 交点时间 / s",
+        "Initial Force Crossing Time s": "起始载荷交点时间 / s",
+        "F63 Crossing Time s": "F₆₃% 交点时间 / s",
+        "F90 Crossing Time s": "F₉₀% 交点时间 / s",
+        "Timing Reference": "计时基准",
+        "Target Window Start s": "目标速度窗口起点 / s",
+        "Target Window End s": "目标速度窗口终点 / s",
+        "Display Start s": "显示起点 / s",
+        "Display End s": "显示终点 / s",
+        "Force Minimum Time s": "阻尼力最小值时间 / s",
+        "Force Settling Time ms": "阻尼力稳定时间 / ms",
+        "Force Start Fraction": "起始载荷比例",
+        "Initial Force Threshold N": "起始载荷阈值 / N",
+        "Initial Force Response Time ms": "起始载荷响应时间 / ms",
+        "Segment Start s": "阶段起点 / s",
+        "Segment End s": "阶段终点 / s",
+        "Damping Response I10-F90 ms": "I₁₀%→F₉₀% 响应时间 / ms",
+        "Current 10% A": "I₁₀% / A",
+        "Current 90% A": "I₉₀% / A",
+        "Current Response I10-I90 ms": "电流 I₁₀%→I₉₀% 响应时间 / ms",
+        "I90 Crossing Time s": "I₉₀% 交点时间 / s",
     }
 
     def _build_response_page(self):
@@ -101,6 +143,22 @@ class DynamicPagesController(_V074DynamicPagesController):
 
     def _fill_table(self, table, frame):
         super()._fill_table(table, frame)
+        if hasattr(self, "response_table") and table is self.response_table:
+            if "Response Type" in frame and self.window.language == "zh_CN":
+                column_index = frame.columns.get_loc("Response Type")
+                labels = {
+                    "Dip & Recovery": "瞬态跌落-恢复型响应",
+                    "No Response": "无可识别响应",
+                    "Normal Response": "常规阶跃响应",
+                }
+                for row_index, value in enumerate(frame["Response Type"]):
+                    table.item(row_index, column_index).setText(labels.get(str(value), str(value)))
+            for column in ("Switch Time t63 ms", "Switch Time t90 ms"):
+                if column in frame:
+                    column_index = frame.columns.get_loc(column)
+                    for row_index, value in enumerate(frame[column]):
+                        if pd.isna(value):
+                            table.item(row_index, column_index).setText("N/A")
         if (
             hasattr(self, "response_table")
             and table is self.response_table

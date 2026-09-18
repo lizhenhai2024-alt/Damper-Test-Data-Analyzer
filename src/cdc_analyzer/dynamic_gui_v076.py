@@ -198,10 +198,12 @@ class DynamicPagesController(_V075DynamicPagesController):
                 rows_used = max(32, int(image.height / 20) + 5)
                 anchor_row += rows_used
 
+            # openpyxl reads image files during save; keep the temporary PNGs alive.
+            workbook.save(workbook_path)
+
         if original_index >= 0 and original_index < self.response_event_combo.count():
             self.response_event_combo.setCurrentIndex(original_index)
             self.refresh_response_plot()
-        workbook.save(workbook_path)
 
     def _append_hysteresis_plot(self, workbook_path: Path) -> None:
         if self.hysteresis_result is None:
@@ -222,7 +224,7 @@ class DynamicPagesController(_V075DynamicPagesController):
                 image.width = int(image.width * ratio)
                 image.height = int(image.height * ratio)
             sheet.add_image(image, "A1")
-        workbook.save(workbook_path)
+            workbook.save(workbook_path)
 
     def export_response(self):
         if self.response_result is None:
