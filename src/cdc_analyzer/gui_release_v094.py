@@ -16,7 +16,7 @@ def _build_release_gui_classes_v094():
             QtWidgets.QMessageBox.information(
                 self,
                 "关于软件" if self.language == "zh_CN" else "About",
-                "Damper Test Data Analyzer\n减振器 / CDC 试验数据分析工具\nV0.9.4",
+                "Damper Test Data Analyzer\n减振器 / CDC 试验数据分析工具\nV0.9.5",
             )
 
     return MainWindow

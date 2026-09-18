@@ -6,10 +6,10 @@
 富奥东机工减振器有限公司（FAWER-TOKICO SHOCK ABSORBER CO., LTD.）CDC / 电控减振器台架数据分析工具。
 
 - 编制：研发院技术中心　李振海
-- 发布日期：2026/9/7
+- 发布日期：2026/9/18
 - 发布：第1版
-- 当前功能版本：`V0.9.4`
-- Python package version：`1.0.0`
+- 当前功能版本：`V0.9.5`
+- Python package version：`0.9.5`
 - GitHub 仓库：[lizhenhai2024-alt/Damper-Test-Data-Analyzer](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer)
 
 ## 核心功能
@@ -43,6 +43,13 @@
 - 专业帮助页面：使用流程、评价算法、符号约定、气体力修正、Data Quality、Sweep、图形工具、常见问题及工程边界
 - `.xlsx` 与 PNG 导出；菜单栏可选 150 / 300 / 600 PPI，默认 300 PPI。PNG 为无损位图，清晰度由导出像素尺寸与查看比例决定；打印或裁切请选择 600 PPI，并按 100% 比例检查原图。
 - Windows x86-64 单文件 EXE 自动构建
+
+## V0.9.5 响应时间分析修复
+
+- 在计算 t₆₃/t₉₀ 前判断响应波形有效性；识别瞬态跌落恢复型波形，并为不适用的传统响应时间显示 N/A。
+- F₉₀% 交点按持续穿越判断，保留缓慢单调响应的有效 t₉₀。
+- 增加电流过冲/下冲计算及百分比标注的独立开关，补齐响应结果表中文字段。
+- 修复含图形的 Excel 导出文件损坏问题。
 
 ## V0.9.1 全电流分析与 PVP/DCTW 批量分析
 
@@ -98,7 +105,7 @@ pytest -q
 cdc-analyzer-gui
 ```
 
-Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.4.exe`。
+Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.5.exe`。
 
 ## CLI 示例
 
