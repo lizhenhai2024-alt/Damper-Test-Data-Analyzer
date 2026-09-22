@@ -40,7 +40,7 @@ class ResponseConfig:
     plateau_fraction: float = 0.15
     min_current_step_a: float = 0.05
     event_derivative_fraction: float = 0.20
-    min_event_separation_s: float = 0.003
+    min_event_separation_s: float = 0.015
     t90_limit_ms: float | None = None
     force_separation_noise_factor: float = 5.0
     force_separation_fraction: float = 0.02

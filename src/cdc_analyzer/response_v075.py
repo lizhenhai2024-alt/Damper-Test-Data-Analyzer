@@ -131,6 +131,8 @@ def _profile_hint(dataset: DataSet, config: ResponseConfig) -> str | None:
 
 def _bmw_state(current_a: float) -> str:
     value = float(current_a)
+    if abs(value) < 0.05:
+        return "Off"
     if abs(value - 0.30) <= 0.20:
         return "Soft"
     if abs(value - 1.60) <= 0.25:

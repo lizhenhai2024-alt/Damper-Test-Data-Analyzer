@@ -17,7 +17,7 @@ from .dynamic_analysis import (
 )
 from .parser import DataSet
 
-BMW_TARGET_SPEEDS_MPS = (0.0131, 0.524, 1.048)
+BMW_TARGET_SPEEDS_MPS = (0.131, 0.524, 1.048)
 AUDI_TARGET_SPEEDS_MPS = (0.052, 0.131, 0.262, 0.524)
 DEFAULT_TARGET_SPEED_TOLERANCE = 0.10
 LOW_SPEED_TOLERANCE_FLOOR_MPS = 0.002
@@ -277,29 +277,32 @@ def _apply_stage_labels(events: pd.DataFrame) -> pd.DataFrame:
         evidence.setdefault(start_level, []).append(abs(float(row["F0 N"])))
         evidence.setdefault(end_level, []).append(abs(float(row["F100 N"])))
 
+    def median_force(level: float) -> float:
+        return float(np.median(evidence[level]))
+
     state_map: dict[float, str] = {}
-    if 2 <= len(evidence) <= 3:
-        ranked = sorted(
-            ((float(np.median(values)), level) for level, values in evidence.items()),
-            key=lambda item: item[0],
-        )
-        magnitudes = [item[0] for item in ranked]
-        if len(magnitudes) == 2:
-            denom = max(magnitudes[-1], 1.0)
-            clear = (magnitudes[-1] - magnitudes[0]) / denom >= 0.03
-            if clear:
-                state_map[ranked[0][1]] = "Soft"
-                state_map[ranked[-1][1]] = "Hard"
-        elif len(magnitudes) == 3:
-            denom = max(magnitudes[-1], 1.0)
-            clear = min(
-                magnitudes[1] - magnitudes[0],
-                magnitudes[2] - magnitudes[1],
-            ) / denom >= 0.02
-            if clear:
-                state_map[ranked[0][1]] = "Soft"
-                state_map[ranked[1][1]] = "Medium"
-                state_map[ranked[2][1]] = "Hard"
+    off_levels = {level for level in evidence if abs(level) < 0.05}
+    active_levels = sorted(level for level in evidence if level not in off_levels)
+    for level in off_levels:
+        state_map[level] = "Off"
+    if len(active_levels) == 2:
+        ranked = sorted(active_levels, key=median_force)
+        magnitudes = [median_force(level) for level in ranked]
+        denom = max(magnitudes[-1], 1.0)
+        if (magnitudes[-1] - magnitudes[0]) / denom >= 0.03:
+            state_map[ranked[0]] = "Soft"
+            state_map[ranked[-1]] = "Hard"
+    elif len(active_levels) == 3:
+        ranked = sorted(active_levels, key=median_force)
+        magnitudes = [median_force(level) for level in ranked]
+        denom = max(magnitudes[-1], 1.0)
+        if min(
+            magnitudes[1] - magnitudes[0],
+            magnitudes[2] - magnitudes[1],
+        ) / denom >= 0.02:
+            state_map[ranked[0]] = "Soft"
+            state_map[ranked[1]] = "Medium"
+            state_map[ranked[2]] = "Hard"
 
     stages: list[str] = []
     transitions: list[str] = []

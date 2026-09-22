@@ -54,20 +54,21 @@ def test_audi_0131_mps_response_survives_low_speed_noise():
     assert "5 ms" in str(result.settings["Velocity Estimator"])
 
 
-def test_0131_mps_with_bmw_profile_returns_actionable_hint():
-    with pytest.raises(ValueError) as exc_info:
-        analyze_response_time_v075(
-            _dataset(_audi_0131_noisy()),
-            ResponseConfig(standard=ResponseStandard.BMW),
-        )
+def test_0131_mps_with_bmw_profile_is_accepted():
+    result = analyze_response_time_v075(
+        _dataset(_audi_0131_noisy()),
+        ResponseConfig(standard=ResponseStandard.BMW),
+    )
 
-    message = str(exc_info.value)
-    assert "0.131" in message
-    assert "Audi" in message
-    assert "BMW" in message
+    assert len(result.events) == 1
+    row = result.events.iloc[0]
+    assert abs(float(row["Target Velocity m/s"])) == pytest.approx(0.131, abs=1e-6)
+    assert row["Stage"] == "Soft→Hard"
+    assert float(row["Switch Time t90 ms"]) > float(row["Switch Time t63 ms"])
 
 
 def test_bmw_current_states_follow_engineering_definition():
+    assert _bmw_state(0.00) == "Off"
     assert _bmw_state(0.30) == "Soft"
     assert _bmw_state(0.34) == "Soft"
     assert _bmw_state(0.80) == "Medium"
