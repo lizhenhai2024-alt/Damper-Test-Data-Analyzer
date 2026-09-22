@@ -209,7 +209,7 @@ def test_current_packaged_gui_keeps_v085_features_in_v090():
     assert "gui_release_v095" in (root / "launcher.py").read_text()
     assert "gui_release_v095:main" in (root / "pyproject.toml").read_text()
     workflow = (root / ".github" / "workflows" / "build-windows.yml").read_text()
-    assert "APP_VERSION: V0.9.5" in workflow
+    assert "APP_VERSION: V0.9.6" in workflow
     assert 'Damper_Test_Data_Analyzer_$env:APP_VERSION' in workflow
     assert "Damper_Test_Data_Analyzer_${{ env.APP_VERSION }}.exe" in workflow
 

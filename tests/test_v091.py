@@ -136,4 +136,4 @@ def test_current_packaged_gui_is_v091():
     root = Path(__file__).resolve().parents[1]
     assert "gui_release_v095" in (root / "launcher.py").read_text()
     assert "gui_release_v095:main" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.5" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "APP_VERSION: V0.9.6" in (root / ".github" / "workflows" / "build-windows.yml").read_text()

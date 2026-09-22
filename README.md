@@ -8,7 +8,7 @@
 - 编制：研发院技术中心　李振海
 - 发布日期：2026/9/7
 - 发布：第1版
-- 当前功能版本：`V0.9.5`
+- 当前功能版本：`V0.9.6`
 - Python package version：`1.0.0`
 - GitHub 仓库：[lizhenhai2024-alt/Damper-Test-Data-Analyzer](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer)
 
@@ -47,6 +47,13 @@
 ## V0.9.1 全电流分析与 PVP/DCTW 批量分析
 
 V0.9.2 扩展电流文件名识别：除 `0.3A-2` 外，也支持试验台常见的 `0.3-A-2`、`0.3_A_2` 和带日期/样件编号前缀的名称；日期与 `FR30` 等编号不会被当作电流。V0.9.3 删除单文件添加入口，并将第21项横轴改为只显示实际试验速度点的 Audi 分类轴。V0.9.4 统一过滤文件头误识别的非试验速度，只保留 `0–1.047 m/s` 的有效速度段；F-V 与 F-I 曲线强制采用连续实线，并可通过“显示数据点”统一切换圆点。
+
+## V0.9.6 BMW 目标速度修正与软→硬阶跃完整性
+
+- 修正 BMW 客户 Profile 目标速度表：第一档由 0.0131 m/s 更正为 **0.131 m/s**（与实际试验速度一致）。此前 0.131 m/s 的 BMW 试验文件会被全部判为“非目标速度”而拒绝，导致软→硬等电流阶跃完全不出现在结果表中。
+- 电流阶跃事件检测的最小间隔由 3 ms 调至 **15 ms**：0.3 A→1.6 A 上升阶跃伴随电流过冲回落时，同一阶跃不再被拆成两个候选；平台识别恢复正常，软→硬（Soft→Hard）、硬→软（Hard→Soft）阶跃全部计入。
+- Stage 状态标注更严谨：近零电流平台（未励磁 0 A）标为 Off，不参与 Soft / Medium / Hard 三态划分；0.3 A = Soft、1.6 A = Hard（BMW 档），0→0.3 A 显示 Off→Soft。
+- 窗口标题、帮助页标题、关于对话框与 EXE 文件名随版本自动更新（`Damper_Test_Data_Analyzer_V0.9.6.exe`）。
 
 ## V0.9.5 电流过冲与瞬态跌落-恢复响应
 
@@ -113,7 +120,7 @@ pytest -q
 cdc-analyzer-gui
 ```
 
-Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.5.exe`。
+Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.6.exe`。
 
 ## CLI 示例
 
