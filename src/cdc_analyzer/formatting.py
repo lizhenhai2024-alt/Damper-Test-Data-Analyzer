@@ -20,6 +20,8 @@ def decimals_for_column(column: str) -> int:
         return 1
     if column in INTEGER_COLUMNS or column.endswith(INTEGER_HINTS):
         return 0
+    if column.endswith(" m/s") and column.startswith(("Rebound", "Compression")):
+        return 0
     return 2
 
 

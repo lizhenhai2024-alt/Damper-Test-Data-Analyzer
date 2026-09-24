@@ -137,6 +137,16 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
     assert all(curve.opts["symbol"] is None for curve in fv_curves + fi_curves)
     assert pages.map_force_velocity_table.columnCount() == 5
+    first_fv = result.force_velocity_table.iloc[0, 1]
+    assert pages.map_force_velocity_table.item(0, 1).text() == f"{int(first_fv)}"
+    fv_plot = pages.map_force_velocity_plot.getItem(0, 0)
+    assert fv_plot.legend is not None
+    window.show()
+    for _ in range(3):
+        app.processEvents()
+    legend_rect = fv_plot.legend.sceneBoundingRect()
+    plot_rect = fv_plot.sceneBoundingRect()
+    assert legend_rect.left() > plot_rect.center().x()
     assert pages.map_file_table.columnCount() == 7
     for row in range(pages.map_file_table.rowCount()):
         assert pages.map_file_table.item(row, 0).checkState() == QtCore.Qt.CheckState.Checked

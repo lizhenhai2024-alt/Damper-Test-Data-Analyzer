@@ -256,6 +256,7 @@ class DynamicPagesController(_BaseController):
         linearity.setTitle(self._text("第20项：电流—阻尼力线性", "Item 20: current–force linearity"), color="#202020", size="11pt")
         linearity.showGrid(x=True, y=True, alpha=0.15)
         legend = linearity.addLegend(offset=(10, 10), labelTextSize="9pt")
+        legend.anchor(itemPos=(1, 0), parentPos=(1, 0), offset=(-10, 10))
         raw = self.map_result.current_force_linearity
         merged = (
             raw[raw["Direction"] == "Rebound"]
@@ -294,6 +295,7 @@ class DynamicPagesController(_BaseController):
         spread.setXRange(-0.6, max(0.6, len(speeds) - 0.4), padding=0)
         width = 0.55
         spread_legend = spread.addLegend(offset=(10, 10), labelTextSize="9pt")
+        spread_legend.anchor(itemPos=(1, 0), parentPos=(1, 0), offset=(-10, 10))
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
             x = np.asarray([speed_positions[float(speed)] for speed in group["Speed m/s"]], dtype=float)
@@ -315,6 +317,7 @@ class DynamicPagesController(_BaseController):
         amplify.getAxis("bottom").setTicks([[(speed_positions[float(speed)], f"{speed:g}") for speed in speeds]])
         amplify.setXRange(-0.6, max(0.6, len(speeds) - 0.4), padding=0)
         amplify_legend = amplify.addLegend(offset=(10, 10), labelTextSize="9pt")
+        amplify_legend.anchor(itemPos=(1, 0), parentPos=(1, 0), offset=(-10, 10))
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
             x = np.asarray([speed_positions[float(speed)] for speed in group["Speed m/s"]], dtype=float)
@@ -334,6 +337,7 @@ class DynamicPagesController(_BaseController):
         fv_plot.setTitle(self._text("F-V 全电流曲线", "F-V full-current curves"), color="#202020", size="11pt")
         fv_plot.showGrid(x=True, y=True, alpha=0.15)
         fv_legend = fv_plot.addLegend(offset=(10, 10), labelTextSize="9pt")
+        fv_legend.anchor(itemPos=(1, 0), parentPos=(1, 0), offset=(-10, 10))
         current_groups = list(raw.groupby("Current A", sort=True))
         point_symbol = "o" if self.map_show_points.isChecked() else None
         for index, (current, current_group) in enumerate(current_groups):
@@ -360,6 +364,7 @@ class DynamicPagesController(_BaseController):
         fi_plot.setTitle(self._text("F-I 不同速度曲线", "F-I curves by speed"), color="#202020", size="11pt")
         fi_plot.showGrid(x=True, y=True, alpha=0.15)
         fi_legend = fi_plot.addLegend(offset=(10, 10), labelTextSize="9pt")
+        fi_legend.anchor(itemPos=(1, 0), parentPos=(1, 0), offset=(-10, 10))
         fi_speeds = sorted(raw["Speed m/s"].unique())
         fi_colors = {speed: self.pg.intColor(index, hues=max(1, len(fi_speeds))) for index, speed in enumerate(fi_speeds)}
         for index, ((speed, direction), group) in enumerate(raw.groupby(["Speed m/s", "Direction"], sort=True)):
