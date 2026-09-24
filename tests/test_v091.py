@@ -108,8 +108,14 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert not hasattr(pages, "map_add_button")
     assert pages.map_linearity_plot.backgroundBrush().color().name() == "#ffffff"
     linearity = pages.map_linearity_plot.getItem(0, 0)
-    dashed = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.DashLine]
+    dashed = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() in (QtCore.Qt.PenStyle.DashLine, QtCore.Qt.PenStyle.CustomDashLine)]
     assert len(dashed) == 2
+    tick_levels = linearity.getAxis("left")._tickLevels
+    assert tick_levels is not None
+    tick_strings = {s for level in tick_levels for _v, s in level}
+    assert "100%" in tick_strings and "-100%" in tick_strings
+    hundred_lines = [it for it in linearity.items if isinstance(it, pg.InfiniteLine) and abs(abs(it.getPos()[1]) - 1.0) < 1e-9]
+    assert len(hundred_lines) == 2
     assert pages.map_spread_plot.getItem(0, 0) is not None
     assert pages.map_spread_plot.getItem(0, 1) is not None
     bars = [item for item in pages.map_spread_plot.getItem(0, 0).items if isinstance(item, pg.BarGraphItem)]

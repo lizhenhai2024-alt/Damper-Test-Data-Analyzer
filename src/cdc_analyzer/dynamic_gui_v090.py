@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from .audi_items_20_21 import (
     ImportedMapFile,
@@ -131,7 +131,10 @@ class DynamicPagesController(_BaseController):
         if not paths:
             QtWidgets.QMessageBox.information(self.window, self._text("未找到数据", "No data found"), self._text("文件夹及子文件夹中没有 .PVP 或 .dctw 文件。", "No .PVP or .dctw files were found."))
             return
+        self.map_files = []
+        self.map_result = None
         self._add_map_paths(paths)
+        self.refresh_map_plots()
 
     def _add_map_paths(self, paths):
         existing = {str(item.path.resolve()).casefold() for item in self.map_files}
@@ -265,7 +268,12 @@ class DynamicPagesController(_BaseController):
         linearity.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
         soft_current = float(self.map_result.settings["Soft Current A"])
         hard_current = float(self.map_result.settings["Hard Current A"])
-        ideal_pen = self.pg.mkPen("#202020", width=1.8, style=QtCore.Qt.PenStyle.DashLine)
+        linearity.getAxis("left").setTicks([[(value, f"{int(value * 100)}%") for value in (-1.0, -0.5, 0.0, 0.5, 1.0)]])
+        linearity.setYRange(-1.1, 1.1, padding=0)
+        band_pen = self._dash_pen("#b0bec5", 1.2, (16, 12))
+        linearity.addLine(y=1.0, pen=band_pen)
+        linearity.addLine(y=-1.0, pen=band_pen)
+        ideal_pen = self._dash_pen("#1565c0", 1.8, (16, 12))
         ideal_curve = linearity.plot([soft_current, hard_current], [0.0, 1.0], pen=ideal_pen)
         linearity.plot([soft_current, hard_current], [0.0, -1.0], pen=ideal_pen)
         legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
@@ -372,6 +380,11 @@ class DynamicPagesController(_BaseController):
         for side in ("left", "bottom"):
             plot.getAxis(side).setPen(self.pg.mkPen("#202020"))
             plot.getAxis(side).setTextPen(self.pg.mkPen("#202020"))
+
+    def _dash_pen(self, color, width=1.5, pattern=(16, 12)):
+        pen = QtGui.QPen(QtGui.QColor(color), width)
+        pen.setDashPattern([float(value) for value in pattern])
+        return pen
 
     def export_map(self):
         if self.map_result is None:
