@@ -209,16 +209,6 @@ class DynamicPagesController(_BaseController):
         ))
 
     def refresh_map_plots(self):
-        old_plot = getattr(self, "_map_spread_left_plot", None)
-        old_view = getattr(self, "_map_spread_right_view", None)
-        if old_plot is not None and old_view is not None:
-            try:
-                old_plot.vb.sigResized.disconnect(self._sync_map_spread_views)
-                self.map_spread_plot.scene().removeItem(old_view)
-            except (RuntimeError, TypeError):
-                pass
-        self._map_spread_left_plot = None
-        self._map_spread_right_view = None
         self.map_linearity_plot.clear()
         self.map_spread_plot.clear()
         self.map_force_velocity_plot.clear()
@@ -251,17 +241,20 @@ class DynamicPagesController(_BaseController):
         legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
 
         spread_data = self.map_result.spread_amplification
-        spread = self.map_spread_plot.addPlot(row=0, col=0)
-        self._map_plot_style(spread, self._text("压缩 ← 阻尼力范围 → 复原", "Compression ← damping-force spread → rebound"), "N", self._text("速度", "Speed"), "m/s")
-        spread.setTitle(self._text("第21项：阻尼力范围和放大倍数", "Item 21: damping-force spread and amplification"), color="#202020", size="11pt")
-        spread.showGrid(x=True, y=True, alpha=0.15)
         directions = [direction for direction in ("Rebound", "Compression") if direction in set(spread_data["Direction"])]
         speeds = np.sort(spread_data["Speed m/s"].unique().astype(float))
         speed_positions = {float(speed): float(index) for index, speed in enumerate(speeds)}
+        bar_colors = {"Rebound": "#f2aa00", "Compression": "#87a9d3"}
+        line_colors = {"Rebound": "#d32f2f", "Compression": "#1565c0"}
+
+        spread = self.map_spread_plot.addPlot(row=0, col=0)
+        self._map_plot_style(spread, self._text("压缩 ← 阻尼力范围 → 复原", "Compression ← damping-force spread → rebound"), "N", self._text("速度", "Speed"), "m/s")
+        spread.setTitle(self._text("第21项：阻尼力范围", "Item 21: damping-force spread"), color="#202020", size="11pt")
+        spread.showGrid(x=True, y=True, alpha=0.15)
         spread.getAxis("bottom").setTicks([[(speed_positions[float(speed)], f"{speed:g}") for speed in speeds]])
         spread.setXRange(-0.6, max(0.6, len(speeds) - 0.4), padding=0)
         width = 0.55
-        bar_colors = {"Rebound": "#f2aa00", "Compression": "#87a9d3"}
+        spread_legend = spread.addLegend(offset=(10, 10), labelTextSize="9pt")
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
             x = np.asarray([speed_positions[float(speed)] for speed in group["Speed m/s"]], dtype=float)
@@ -269,38 +262,32 @@ class DynamicPagesController(_BaseController):
             color = bar_colors[direction]
             bars = self.pg.BarGraphItem(x=x, height=values, width=width, brush=self.pg.mkBrush(color), pen=self.pg.mkPen("#303030"))
             spread.addItem(bars)
+            spread_legend.addItem(bars, self._localized_direction(direction))
             for x_value, value in zip(x, values):
                 label = self.pg.TextItem(text=f"{value:.0f}", color="#202020", anchor=(0.5, 1.0 if value >= 0 else 0.0))
                 label.setPos(float(x_value), float(value))
                 spread.addItem(label)
         spread.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
-        spread.showAxis("right")
-        right_axis = spread.getAxis("right")
-        right_axis.setLabel(self._text("放大倍数", "Amplification"), **{"font-size": "10pt", "color": "#b71c1c"})
-        right_axis.setPen(self.pg.mkPen("#b71c1c"))
-        right_axis.setTextPen(self.pg.mkPen("#b71c1c"))
-        right_view = self.pg.ViewBox()
-        spread.scene().addItem(right_view)
-        right_axis.linkToView(right_view)
-        right_view.setXLink(spread)
-        self._map_spread_left_plot = spread
-        self._map_spread_right_view = right_view
-        spread.vb.sigResized.connect(self._sync_map_spread_views)
-        self._sync_map_spread_views()
-        legend2 = spread.addLegend(offset=(-10, 10), labelTextSize="9pt")
-        line_colors = {"Rebound": "#d32f2f", "Compression": "#1565c0"}
+
+        amplify = self.map_spread_plot.addPlot(row=0, col=1)
+        self._map_plot_style(amplify, self._text("放大倍数", "Amplification"), None, self._text("速度", "Speed"), "m/s")
+        amplify.setTitle(self._text("第21项：放大倍数", "Item 21: amplification"), color="#202020", size="11pt")
+        amplify.showGrid(x=True, y=True, alpha=0.15)
+        amplify.getAxis("bottom").setTicks([[(speed_positions[float(speed)], f"{speed:g}") for speed in speeds]])
+        amplify.setXRange(-0.6, max(0.6, len(speeds) - 0.4), padding=0)
+        amplify_legend = amplify.addLegend(offset=(10, 10), labelTextSize="9pt")
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
             x = np.asarray([speed_positions[float(speed)] for speed in group["Speed m/s"]], dtype=float)
             values = group["Amplification"].to_numpy(float)
             color = line_colors[direction]
-            curve = self.pg.PlotDataItem(x, values, pen=self.pg.mkPen(color, width=2), symbol="o", symbolSize=6, symbolBrush=color)
-            right_view.addItem(curve)
-            legend2.addItem(curve, self._localized_direction(direction))
+            curve = amplify.plot(x, values, pen=self.pg.mkPen(color, width=2), symbol="o", symbolSize=6, symbolBrush=color)
+            amplify_legend.addItem(curve, self._localized_direction(direction))
             for point_index, (x_value, value) in enumerate(zip(x, values)):
                 label = self.pg.TextItem(text=f"{value:.2f}×", color=color, anchor=(0.5, 1.15 if point_index % 2 == 0 else -0.15))
                 label.setPos(float(x_value), float(value))
-                right_view.addItem(label)
+                amplify.addItem(label)
+        amplify.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
 
         raw = self.map_result.current_force_linearity
         fv_plot = self.map_force_velocity_plot.addPlot(row=0, col=0)
@@ -355,13 +342,6 @@ class DynamicPagesController(_BaseController):
         for side in ("left", "bottom"):
             plot.getAxis(side).setPen(self.pg.mkPen("#202020"))
             plot.getAxis(side).setTextPen(self.pg.mkPen("#202020"))
-
-    def _sync_map_spread_views(self):
-        plot = getattr(self, "_map_spread_left_plot", None)
-        view = getattr(self, "_map_spread_right_view", None)
-        if plot is not None and view is not None:
-            view.setGeometry(plot.vb.sceneBoundingRect())
-            view.linkedViewChanged(plot.vb, view.XAxis)
 
     def export_map(self):
         if self.map_result is None:
