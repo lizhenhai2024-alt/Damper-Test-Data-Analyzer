@@ -8,7 +8,7 @@
 - 编制：研发院技术中心　李振海
 - 发布日期：2026/9/7
 - 发布：第1版
-- 当前功能版本：`V0.9.6`
+- 当前功能版本：`V0.9.7`
 - Python package version：`1.0.0`
 - GitHub 仓库：[lizhenhai2024-alt/Damper-Test-Data-Analyzer](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer)
 
@@ -47,6 +47,14 @@
 ## V0.9.1 全电流分析与 PVP/DCTW 批量分析
 
 V0.9.2 扩展电流文件名识别：除 `0.3A-2` 外，也支持试验台常见的 `0.3-A-2`、`0.3_A_2` 和带日期/样件编号前缀的名称；日期与 `FR30` 等编号不会被当作电流。V0.9.3 删除单文件添加入口，并将第21项横轴改为只显示实际试验速度点的 Audi 分类轴。V0.9.4 统一过滤文件头误识别的非试验速度，只保留 `0–1.047 m/s` 的有效速度段；F-V 与 F-I 曲线强制采用连续实线，并可通过“显示数据点”统一切换圆点。
+
+## V0.9.7 全电流分析交互与图表增强
+
+- 第 21 项「力值范围与放大倍数」拆分为左右并排两图：左图为阻尼力范围柱形图，右图为放大倍数折线图，各自独立坐标轴、图例与数值标注。
+- 全电流文件表格新增「计算」勾选列，默认全部勾选；取消勾选的文件不参与计算、不进入图表；分析后修改勾选会自动清空结果与图形。
+- 第 20 项纵坐标刻度改为百分比（-100%～100%），新增 ±100% 水平虚线参考线，虚线间隔加大；45° 理想线由黑色改为蓝色。
+- F-V 数据保留整数（四舍五入）。
+- 选择新数据文件夹时替换式加载：清空上一次的文件列表、计算结果与图形。
 
 ## V0.9.6 BMW 目标速度修正与软→硬阶跃完整性
 
@@ -120,7 +128,7 @@ pytest -q
 cdc-analyzer-gui
 ```
 
-Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.6.exe`。
+Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.7.exe`。
 
 ## CLI 示例
 
