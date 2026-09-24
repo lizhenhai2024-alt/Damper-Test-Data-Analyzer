@@ -66,6 +66,8 @@ class DynamicPagesController(_BaseController):
         self.map_file_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.map_file_table.setMaximumHeight(210)
         root.addWidget(self.map_file_table)
+        self._map_table_filling = False
+        self.map_file_table.itemChanged.connect(self._on_map_check_changed)
 
         self.map_views = QtWidgets.QTabWidget()
         self.map_linearity_plot = self.pg.GraphicsLayoutWidget()
@@ -157,18 +159,37 @@ class DynamicPagesController(_BaseController):
         ))
 
     def _refresh_map_file_table(self):
-        headers = [self._text("文件", "File"), self._text("格式", "Format"), self._text("电流 A", "Current A"), self._text("速度段", "Speed runs"), self._text("状态", "Status"), self._text("完整路径", "Full path")]
+        headers = [self._text("计算", "Include"), self._text("文件", "File"), self._text("格式", "Format"), self._text("电流 A", "Current A"), self._text("速度段", "Speed runs"), self._text("状态", "Status"), self._text("完整路径", "Full path")]
         table = self.map_file_table
-        table.setRowCount(len(self.map_files))
-        table.setColumnCount(len(headers))
-        table.setHorizontalHeaderLabels(headers)
-        for row, item in enumerate(self.map_files):
-            values = [item.path.name, item.format, "" if not np.isfinite(item.current_a) else f"{item.current_a:g}", ", ".join(f"{s:g}" for s in item.speeds_mps), item.status, str(item.path)]
-            for column, value in enumerate(values):
-                cell = QtWidgets.QTableWidgetItem(value)
-                cell.setFlags(cell.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-                table.setItem(row, column, cell)
-        table.resizeColumnsToContents()
+        self._map_table_filling = True
+        try:
+            table.setRowCount(len(self.map_files))
+            table.setColumnCount(len(headers))
+            table.setHorizontalHeaderLabels(headers)
+            for row, item in enumerate(self.map_files):
+                check = QtWidgets.QTableWidgetItem()
+                check.setFlags(QtCore.Qt.ItemFlag.ItemIsUserCheckable | QtCore.Qt.ItemFlag.ItemIsEnabled)
+                check.setCheckState(QtCore.Qt.CheckState.Checked)
+                table.setItem(row, 0, check)
+                values = [item.path.name, item.format, "" if not np.isfinite(item.current_a) else f"{item.current_a:g}", ", ".join(f"{s:g}" for s in item.speeds_mps), item.status, str(item.path)]
+                for column, value in enumerate(values):
+                    cell = QtWidgets.QTableWidgetItem(value)
+                    cell.setFlags(cell.flags() & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+                    table.setItem(row, column + 1, cell)
+            table.resizeColumnsToContents()
+        finally:
+            self._map_table_filling = False
+
+    def _on_map_check_changed(self, item):
+        if self._map_table_filling or item.column() != 0:
+            return
+        if self.map_result is not None:
+            self.map_result = None
+            self.refresh_map_plots()
+            self.map_status.setText(self._text(
+                "勾选状态已变化，之前的分析结果已清空，请重新分析。",
+                "Selection changed; previous results were cleared. Run analysis again.",
+            ))
 
     def remove_selected_map_files(self):
         rows = sorted({index.row() for index in self.map_file_table.selectionModel().selectedRows()}, reverse=True)
@@ -182,12 +203,21 @@ class DynamicPagesController(_BaseController):
         if not self.map_files:
             QtWidgets.QMessageBox.information(self.window, self._text("全电流分析", "Full-current analysis"), self._text("请先添加 PVP 或 DCTW 文件。", "Add PVP or DCTW files first."))
             return
+        selected_files = [
+            item for row, item in enumerate(self.map_files)
+            if self.map_file_table.item(row, 0) is not None
+            and self.map_file_table.item(row, 0).checkState() == QtCore.Qt.CheckState.Checked
+        ]
+        if not selected_files:
+            QtWidgets.QMessageBox.information(self.window, self._text("全电流分析", "Full-current analysis"), self._text("请至少勾选一个文件参与计算。", "Select at least one file to include."))
+            return
+        skipped = len(self.map_files) - len(selected_files)
         cursor_set = False
         try:
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
             cursor_set = True
             self.map_result = analyze_map_files(
-                self.map_files,
+                selected_files,
                 soft_current_a=self.map_soft_current.value(),
                 hard_current_a=self.map_hard_current.value(),
             )
@@ -204,8 +234,8 @@ class DynamicPagesController(_BaseController):
         self.refresh_map_plots()
         repeats = int(self.map_result.current_force_linearity["Repeat Count"].max())
         self.map_status.setText(self._text(
-            f"分析完成：{len(self.map_files)} 个文件，{len(self.map_result.run_detail)} 个有效速度段；同工况最多 {repeats} 次重复，按保留数据求均值。",
-            f"Analysis complete: {len(self.map_files)} files and {len(self.map_result.run_detail)} valid speed runs; up to {repeats} retained repeats were averaged.",
+            f"分析完成：{len(selected_files)} 个文件" + (f"（{skipped} 个未勾选已跳过），" if skipped else "，") + f"{len(self.map_result.run_detail)} 个有效速度段；同工况最多 {repeats} 次重复，按保留数据求均值。",
+            f"Analysis complete: {len(selected_files)} file(s)" + (f" ({skipped} unchecked skipped), " if skipped else ", ") + f"{len(self.map_result.run_detail)} valid speed runs; up to {repeats} retained repeats were averaged.",
         ))
 
     def refresh_map_plots(self):

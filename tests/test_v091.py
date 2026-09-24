@@ -129,6 +129,16 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
     assert all(curve.opts["symbol"] is None for curve in fv_curves + fi_curves)
     assert pages.map_force_velocity_table.columnCount() == 5
+    assert pages.map_file_table.columnCount() == 7
+    for row in range(pages.map_file_table.rowCount()):
+        assert pages.map_file_table.item(row, 0).checkState() == QtCore.Qt.CheckState.Checked
+    pages.map_file_table.item(1, 0).setCheckState(QtCore.Qt.CheckState.Unchecked)
+    app.processEvents()
+    assert pages.map_result is None
+    pages.analyze_map()
+    included = set(pages.map_result.run_detail["Current A"].unique())
+    assert 0.95 not in included
+    assert {0.3, 1.6} <= included
     window.close()
     app.processEvents()
 
