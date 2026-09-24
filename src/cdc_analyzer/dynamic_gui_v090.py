@@ -256,15 +256,17 @@ class DynamicPagesController(_BaseController):
         linearity.setTitle(self._text("第20项：电流—阻尼力线性", "Item 20: current–force linearity"), color="#202020", size="11pt")
         linearity.showGrid(x=True, y=True, alpha=0.15)
         legend = linearity.addLegend(offset=(10, 10), labelTextSize="9pt")
-        item20_speeds = sorted(self.map_result.current_force_linearity["Speed m/s"].unique())
-        speed_colors = {speed: self.pg.intColor(index, hues=max(1, len(item20_speeds))) for index, speed in enumerate(item20_speeds)}
-        for index, ((speed, direction), group) in enumerate(self.map_result.current_force_linearity.groupby(["Speed m/s", "Direction"], sort=True)):
-            group = group.sort_values("Current A")
-            pen = self.pg.mkPen(speed_colors[speed], width=2)
-            pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
-            curve = linearity.plot(group["Current A"].to_numpy(float), group["Normalized Force"].to_numpy(float), pen=pen, symbol="o", symbolSize=6)
-            if direction == "Rebound":
-                legend.addItem(curve, f"{speed:g} m/s")
+        raw = self.map_result.current_force_linearity
+        merged = (
+            raw[raw["Direction"] == "Rebound"]
+            .groupby("Current A")["Normalized Force"]
+            .mean()
+            .sort_index()
+        )
+        data_pen = self.pg.mkPen("#1565c0", width=2)
+        data_pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
+        curve = linearity.plot(merged.index.to_numpy(float), merged.to_numpy(float), pen=data_pen, symbol="o", symbolSize=6)
+        legend.addItem(curve, self._text("归一化阻尼力差（各速度均值）", "Normalized damping-force difference (speed mean)"))
         linearity.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
         soft_current = float(self.map_result.settings["Soft Current A"])
         hard_current = float(self.map_result.settings["Hard Current A"])
@@ -275,7 +277,6 @@ class DynamicPagesController(_BaseController):
         linearity.addLine(y=-1.0, pen=band_pen)
         ideal_pen = self._dash_pen("#1565c0", 1.8, (16, 12))
         ideal_curve = linearity.plot([soft_current, hard_current], [0.0, 1.0], pen=ideal_pen)
-        linearity.plot([soft_current, hard_current], [0.0, -1.0], pen=ideal_pen)
         legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
 
         spread_data = self.map_result.spread_amplification

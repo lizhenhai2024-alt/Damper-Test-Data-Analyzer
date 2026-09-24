@@ -109,7 +109,9 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert pages.map_linearity_plot.backgroundBrush().color().name() == "#ffffff"
     linearity = pages.map_linearity_plot.getItem(0, 0)
     dashed = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() in (QtCore.Qt.PenStyle.DashLine, QtCore.Qt.PenStyle.CustomDashLine)]
-    assert len(dashed) == 2
+    assert len(dashed) == 1
+    solid = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine]
+    assert len(solid) == 1
     tick_levels = linearity.getAxis("left")._tickLevels
     assert tick_levels is not None
     tick_strings = {s for level in tick_levels for _v, s in level}
