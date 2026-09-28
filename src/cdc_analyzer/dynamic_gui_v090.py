@@ -241,9 +241,11 @@ class DynamicPagesController(_BaseController):
         self._fill_table(self.map_run_table, self.map_result.run_detail)
         self.refresh_map_plots()
         repeats = int(self.map_result.current_force_linearity["Repeat Count"].max())
+        soft_a = float(self.map_result.settings["Soft Current A"])
+        hard_a = float(self.map_result.settings["Hard Current A"])
         self.map_status.setText(self._text(
-            f"分析完成：{len(selected_files)} 个文件" + (f"（{skipped} 个未勾选已跳过），" if skipped else "，") + f"{len(self.map_result.run_detail)} 个有效速度段；同工况最多 {repeats} 次重复，取最后一个重复。",
-            f"Analysis complete: {len(selected_files)} file(s)" + (f" ({skipped} unchecked skipped), " if skipped else ", ") + f"{len(self.map_result.run_detail)} valid speed runs; up to {repeats} retained repeats, the last repeat is used.",
+            f"分析完成：{len(selected_files)} 个文件" + (f"（{skipped} 个未勾选已跳过），" if skipped else "，") + f"{len(self.map_result.run_detail)} 个有效速度段；同工况最多 {repeats} 次重复，取最后一个重复。软/硬电流自动取最软/最硬档 {soft_a:g} A / {hard_a:g} A。",
+            f"Analysis complete: {len(selected_files)} file(s)" + (f" ({skipped} unchecked skipped), " if skipped else ", ") + f"{len(self.map_result.run_detail)} valid speed runs; up to {repeats} retained repeats, the last repeat is used. Soft/hard anchors are the softest/hardest current steps {soft_a:g} A / {hard_a:g} A.",
         ))
 
     def refresh_map_plots(self):
@@ -267,16 +269,19 @@ class DynamicPagesController(_BaseController):
         self.map_linearity_plot.ci.layout.setColumnStretchFactor(0, 4)
         self.map_linearity_plot.ci.layout.setColumnStretchFactor(1, 1)
         raw = self.map_result.current_force_linearity
-        merged = (
-            raw[raw["Direction"] == "Rebound"]
-            .groupby("Current A")["Normalized Force"]
-            .mean()
-            .sort_index()
-        )
-        data_pen = self.pg.mkPen("#1565c0", width=2)
-        data_pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
-        curve = linearity.plot(merged.index.to_numpy(float), merged.to_numpy(float), pen=data_pen, symbol="o", symbolSize=6)
-        legend.addItem(curve, self._text("归一化阻尼力差（各速度均值）", "Normalized damping-force difference (speed mean)"))
+        item20_speeds = sorted(raw["Speed m/s"].unique())
+        speed_colors = {speed: self.pg.intColor(index, hues=max(1, len(item20_speeds))) for index, speed in enumerate(item20_speeds)}
+        for ((speed, direction), group) in raw.groupby(["Speed m/s", "Direction"], sort=True):
+            group = group.sort_values("Current A")
+            color = speed_colors[speed]
+            pen = self.pg.mkPen(color, width=2)
+            pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
+            curve = linearity.plot(
+                group["Current A"].to_numpy(float), group["Normalized Force"].to_numpy(float),
+                pen=pen, symbol="o", symbolSize=6,
+            )
+            if direction == "Rebound":
+                legend.addItem(curve, self._text(f"{speed:g} m/s", f"{speed:g} m/s"))
         linearity.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
         soft_current = float(self.map_result.settings["Soft Current A"])
         hard_current = float(self.map_result.settings["Hard Current A"])
@@ -288,6 +293,7 @@ class DynamicPagesController(_BaseController):
         ideal_pen = self._dash_pen("#1565c0", 1.8, (16, 12))
         ideal_curve = linearity.plot([soft_current, hard_current], [0.0, 1.0], pen=ideal_pen)
         legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
+        linearity.plot([soft_current, hard_current], [0.0, -1.0], pen=ideal_pen)
 
         spread_data = self.map_result.spread_amplification
         directions = [direction for direction in ("Rebound", "Compression") if direction in set(spread_data["Direction"])]

@@ -72,6 +72,27 @@ def test_items_20_21_calculation_and_repeat_handling(monkeypatch, tmp_path):
     assert (result.spread_amplification.query("Direction == 'Compression'")["Damping Force Spread N"] < 0).all()
 
 
+def test_soft_hard_anchors_follow_softest_hardest_current_steps(monkeypatch, tmp_path):
+    files = []
+    for current in (0.3, 1.0, 2.0, 5.0):
+        path = tmp_path / f"{current:g}A-1.dctw"
+        path.write_bytes(b"fixture")
+        files.append(items.ImportedMapFile(path, current, "DCTW", 2, (0.1, 0.3)))
+    monkeypatch.setattr(items, "_parse_dctw", lambda path, current: _synthetic_runs(current))
+    # The GUI default anchors (0.3 / 1.6 A) are not present as the hard step
+    # here; Audi sections 20/21 use the softest/hardest retained current steps.
+    result = items.analyze_map_files(files, soft_current_a=0.3, hard_current_a=1.6)
+    assert result.settings["Soft Current A"] == pytest.approx(0.3)
+    assert result.settings["Hard Current A"] == pytest.approx(5.0)
+    lin = result.current_force_linearity
+    rebound_5a = lin[(lin["Current A"] == 5.0) & (lin["Direction"] == "Rebound")]["Normalized Force"]
+    assert rebound_5a.to_numpy() == pytest.approx([1.0, 1.0])
+    compression_5a = lin[(lin["Current A"] == 5.0) & (lin["Direction"] == "Compression")]["Normalized Force"]
+    assert compression_5a.to_numpy() == pytest.approx([-1.0, -1.0])
+    for (_speed, direction), group in lin.groupby(["Speed m/s", "Direction"]):
+        assert group.sort_values("Current A")["Linearity R²"].iloc[0] == pytest.approx(1.0)
+
+
 def test_v090_gui_has_batch_list_and_safe_remove(tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6 import QtCore, QtWidgets
@@ -100,4 +121,4 @@ def test_current_packaged_gui_is_v090():
     assert "gui_release_v095" in (root / "launcher.py").read_text()
     assert "gui_release_v095:main" in (root / "pyproject.toml").read_text()
     assert "olefile>=0.47" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.9" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "APP_VERSION: V0.9.10" in (root / ".github" / "workflows" / "build-windows.yml").read_text()

@@ -421,11 +421,13 @@ def analyze_map_files(
     currents = {round(float(value), 9) for value in file_currents.values()}
     if len(currents) < 2:
         raise ValueError("第20/21项至少需要两个不同电流档 / Items 20/21 require at least two different current levels")
-    for label, selected in (("软电流", soft_current_a), ("硬电流", hard_current_a)):
-        if not any(np.isclose(selected, current, atol=1e-6) for current in currents):
-            raise ValueError(f"{label} {selected:g} A 在已加载文件名中不存在")
-    if np.isclose(soft_current_a, hard_current_a):
-        raise ValueError("软电流与硬电流不能相同")
+    # Audi VR-EF-33-2 sections 20/21 define the soft and hard damping force per
+    # speed and direction as the softest and hardest retained current steps of
+    # that speed/direction group (smallest and largest current level).  The GUI
+    # soft/hard current fields are therefore treated as reference defaults only;
+    # the actual anchors are derived automatically from the loaded data.
+    used_soft_a = float(min(currents))
+    used_hard_a = float(max(currents))
     rows, file_rows = [], []
     for item in files:
         current_a = file_currents[item.path]
@@ -459,10 +461,8 @@ def analyze_map_files(
     linearity_rows, spread_rows = [], []
     for (speed, direction), group in grouped.groupby(["Speed m/s", "Direction"], sort=True):
         group = group.sort_values("Current A")
-        soft_matches = group.index[np.isclose(group["Current A"], soft_current_a, atol=1e-6)]
-        hard_matches = group.index[np.isclose(group["Current A"], hard_current_a, atol=1e-6)]
-        if not len(soft_matches) or not len(hard_matches):
-            raise ValueError(f"{speed:g} m/s {direction} 缺少软电流 {soft_current_a:g} A 或硬电流 {hard_current_a:g} A 数据")
+        soft_matches = group.index[np.isclose(group["Current A"], used_soft_a, atol=1e-6)]
+        hard_matches = group.index[np.isclose(group["Current A"], used_hard_a, atol=1e-6)]
         soft_index, hard_index = soft_matches[0], hard_matches[0]
         soft, hard = float(group.loc[soft_index, "Abs Force N"]), float(group.loc[hard_index, "Abs Force N"])
         denominator = hard - soft
@@ -511,7 +511,7 @@ def analyze_map_files(
         force_velocity[column] = force_velocity[column].round().astype("Int64")
     return MapAnalysisResult(
         pd.DataFrame(file_rows), detail, pd.DataFrame(linearity_rows), pd.DataFrame(spread_rows), force_velocity,
-        {"Standard": "Audi VR-EF-33-2p5 sections 20/21", "Maximum Speed m/s": max_speed_mps, "Soft Current A": soft_current_a, "Hard Current A": hard_current_a, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema", "Current Source": "automatically parsed from every filename", "Repeat Handling": "last retained repeat at equal current/speed/direction (last complete cycle of the last file)"},
+        {"Standard": "Audi VR-EF-33-2p5 sections 20/21", "Maximum Speed m/s": max_speed_mps, "Soft Current A": used_soft_a, "Hard Current A": used_hard_a, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema; softest/hardest current step anchors per speed and direction", "Current Source": "automatically parsed from every filename", "Repeat Handling": "last retained repeat at equal current/speed/direction (last complete cycle of the last file)"},
     )
 
 

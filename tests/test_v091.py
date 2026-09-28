@@ -109,9 +109,9 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert pages.map_linearity_plot.backgroundBrush().color().name() == "#ffffff"
     linearity = pages.map_linearity_plot.getItem(0, 0)
     dashed = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() in (QtCore.Qt.PenStyle.DashLine, QtCore.Qt.PenStyle.CustomDashLine)]
-    assert len(dashed) == 1
+    assert len(dashed) == 2
     solid = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine]
-    assert len(solid) == 1
+    assert len(solid) == 4
     tick_levels = linearity.getAxis("left")._tickLevels
     assert tick_levels is not None
     tick_strings = {s for level in tick_levels for _v, s in level}
@@ -165,4 +165,4 @@ def test_current_packaged_gui_is_v091():
     root = Path(__file__).resolve().parents[1]
     assert "gui_release_v095" in (root / "launcher.py").read_text()
     assert "gui_release_v095:main" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.9" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "APP_VERSION: V0.9.10" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
