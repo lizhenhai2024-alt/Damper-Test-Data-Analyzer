@@ -140,13 +140,13 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     first_fv = result.force_velocity_table.iloc[0, 1]
     assert pages.map_force_velocity_table.item(0, 1).text() == f"{int(first_fv)}"
     fv_plot = pages.map_force_velocity_plot.getItem(0, 0)
-    assert fv_plot.legend is not None
+    assert pages.map_fv_legend is not None
     window.show()
     for _ in range(3):
         app.processEvents()
-    legend_rect = fv_plot.legend.sceneBoundingRect()
+    legend_rect = pages.map_fv_legend.sceneBoundingRect()
     plot_rect = fv_plot.sceneBoundingRect()
-    assert legend_rect.left() > plot_rect.center().x()
+    assert legend_rect.left() >= plot_rect.right() - 2
     assert pages.map_file_table.columnCount() == 7
     for row in range(pages.map_file_table.rowCount()):
         assert pages.map_file_table.item(row, 0).checkState() == QtCore.Qt.CheckState.Checked
