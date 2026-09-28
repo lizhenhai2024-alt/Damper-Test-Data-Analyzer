@@ -513,19 +513,21 @@ def analyze_response_time_v074(
 
         force_settle = float("nan")
         if classical_valid:
-            valid_90, force_settle = _first_valid_force_crossing(
+            raw_90 = _first_level_crossing(
+                response_t, response_f, thresholds[0.90][0], direction=force_direction,
+            )
+            _valid_90, force_settle = _first_valid_force_crossing(
                 response_t, response_f, thresholds[0.90][0], force_direction,
                 force_100,
                 max(config.force_recovery_band_fraction * abs(force_0),
                     config.force_recovery_sigma_factor * noise),
                 config.response_dwell_s,
             )
-            thresholds[0.90] = (thresholds[0.90][0], valid_90)
+            thresholds[0.90] = (thresholds[0.90][0], raw_90 if raw_90 is not None else _valid_90)
             start_cross = thresholds[config.force_start_fraction][1]
             middle_cross = thresholds[0.63][1]
-            if (valid_90 is not None and start_cross is not None and middle_cross is not None
-                    and not (start_cross < middle_cross < valid_90
-                             and (not np.isfinite(force_settle) or valid_90 <= force_settle))):
+            if (thresholds[0.90][1] is not None and start_cross is not None and middle_cross is not None
+                    and not (start_cross < middle_cross < thresholds[0.90][1])):
                 thresholds[0.90] = (thresholds[0.90][0], None)
                 force_settle = float("nan")
 
@@ -550,10 +552,13 @@ def analyze_response_time_v074(
             else float("nan")
         )
 
-        direction_probe = float(np.median(eval_f[np.abs(eval_t - t0) <= 0.001]))
-        if not np.isfinite(direction_probe) or abs(direction_probe) < 5.0:
-            direction_probe = force_0
-        direction = "Rebound" if direction_probe > 0 else "Compression"
+        if np.isfinite(velocity_0) and abs(velocity_0) > 1e-9:
+            direction = "Rebound" if velocity_0 > 0 else "Compression"
+        else:
+            direction_probe = float(np.median(eval_f[np.abs(eval_t - t0) <= 0.001]))
+            if not np.isfinite(direction_probe) or abs(direction_probe) < 5.0:
+                direction_probe = force_0
+            direction = "Rebound" if direction_probe > 0 else "Compression"
 
         issues: list[str] = []
         if config.standard == ResponseStandard.AUDI and np.isfinite(sample_rate) and sample_rate < 4000.0:
@@ -563,7 +568,7 @@ def analyze_response_time_v074(
         elif any(value[1] is None for value in thresholds.values()):
             issues.append("one or more force thresholds not crossed inside target-speed window")
         elif not np.isfinite(force_settle):
-            issues.append("t90 crossing observed, but target-speed window too short to verify settling dwell")
+            issues.append("t90 crossing observed, but force did not hold within the settling band for the full dwell")
         local_velocity = target_segment[target_segment[TIME].between(t0 - 0.003, t0 + 0.003)][VELOCITY].abs()
         if len(local_velocity) >= 3 and float(local_velocity.mean()) > 0:
             variation = float(local_velocity.std(ddof=0) / local_velocity.mean())

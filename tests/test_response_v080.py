@@ -199,6 +199,52 @@ def test_target_speed_parser_accepts_customer_lists():
         parse_target_speeds("0.3, 0")
 
 
+def _zero_to_five_rebound_dataset(speed_mps: float = 0.131) -> DataSet:
+    """0A -> 5A step on a Rebound (positive-velocity) stroke.
+
+    At 0 A the rebound damping force is slightly negative; after the step the
+    force crosses zero and rises to a large positive value.  Direction must be
+    derived from motion (velocity sign), not from the local force sign, or this
+    event is mislabelled as Compression.
+    """
+    sample_rate = 4096.0
+    t = np.arange(0.0, 0.20, 1.0 / sample_rate)
+    displacement_mm = speed_mps * 1000.0 * t
+    current = 0.0 + 5.0 / (1.0 + np.exp(-(t - 0.040) / 0.00045))
+    load = -450.0 + 2950.0 / (1.0 + np.exp(-(t - 0.045) / 0.0012))
+    frame = pd.DataFrame(
+        {
+            TIME: t,
+            DISP: displacement_mm,
+            LOAD: load,
+            CURRENT: current,
+        }
+    )
+    return DataSet(
+        data=frame,
+        source_path=Path("synthetic_zero_to_five_rebound.dat"),
+        source_format="synthetic",
+        metadata={},
+    )
+
+
+def test_zero_to_five_step_on_rebound_stroke_is_labeled_rebound():
+    result = analyze_response_time_v080(
+        _zero_to_five_rebound_dataset(),
+        ResponseConfig(standard=ResponseStandard.BMW),
+    )
+    assert not result.events.empty
+    row = result.events.iloc[0]
+
+    assert row["Current Start A"] == pytest.approx(0.0, abs=0.05)
+    assert row["Current End A"] == pytest.approx(5.0, abs=0.05)
+    assert float(row["Velocity at t0 m/s"]) > 0
+    assert row["Direction"] == "Rebound"
+    assert row["Force Change"] == "Build-up"
+    assert np.isfinite(float(row["Switch Time t90 ms"]))
+    assert float(row["Switch Time t90 ms"]) > 0
+
+
 def test_v080_gui_exposes_editable_target_speed_list():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     pytest.importorskip("PySide6")
