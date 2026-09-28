@@ -110,6 +110,7 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     linearity = pages.map_linearity_plot.getItem(0, 0)
     dashed = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() in (QtCore.Qt.PenStyle.DashLine, QtCore.Qt.PenStyle.CustomDashLine)]
     assert len(dashed) == 2
+    assert all(curve.opts["pen"].isCosmetic() for curve in dashed)
     solid = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine]
     assert len(solid) == 4
     tick_levels = linearity.getAxis("left")._tickLevels
@@ -118,6 +119,7 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert "100%" in tick_strings and "-100%" in tick_strings
     hundred_lines = [it for it in linearity.items if isinstance(it, pg.InfiniteLine) and abs(abs(it.getPos()[1]) - 1.0) < 1e-9]
     assert len(hundred_lines) == 2
+    assert all(line.pen.isCosmetic() for line in hundred_lines)
     assert pages.map_spread_plot.getItem(0, 0) is not None
     assert pages.map_spread_plot.getItem(0, 1) is not None
     bars = [item for item in pages.map_spread_plot.getItem(0, 0).items if isinstance(item, pg.BarGraphItem)]

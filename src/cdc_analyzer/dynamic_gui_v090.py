@@ -420,6 +420,8 @@ class DynamicPagesController(_BaseController):
 
     def _dash_pen(self, color, width=1.5, pattern=(16, 12)):
         pen = QtGui.QPen(QtGui.QColor(color), width)
+        # Plot coordinates are scaled by the ViewBox; keep dash width in pixels.
+        pen.setCosmetic(True)
         pen.setDashPattern([float(value) for value in pattern])
         return pen
 
