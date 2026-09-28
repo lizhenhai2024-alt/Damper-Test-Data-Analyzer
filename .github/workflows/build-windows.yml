@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      APP_VERSION: V0.9.10
+      APP_VERSION: V0.9.11
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,7 +24,11 @@ jobs:
       - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[gui]" pyinstaller pillow
+          python -m pip install -e ".[dev,gui]" pyinstaller pillow
+      - name: Test core and GUI
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
       - name: Render application icon
         run: python tools/render_app_icon.py
       - name: Build executable
@@ -36,3 +40,24 @@ jobs:
           name: Damper_Test_Data_Analyzer_${{ env.APP_VERSION }}_Windows
           path: dist/Damper_Test_Data_Analyzer_${{ env.APP_VERSION }}.exe
           if-no-files-found: error
+
+  release:
+    if: github.ref == 'refs/heads/dev-v0.9.11-audi-item20-render'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Damper_Test_Data_Analyzer_V0.9.11_Windows
+          path: dist
+      - name: Publish V0.9.11
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create V0.9.11 dist/Damper_Test_Data_Analyzer_V0.9.11.exe \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "V0.9.11" \
+            --notes "修复第20项的 ±100% 参考虚线和 45° 理想虚线在缩放后显示为宽色带的问题。阻尼力计算与导出数据未改动。"
