@@ -60,4 +60,4 @@ jobs:
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "V0.9.11" \
-            --notes "修复第20项的 ±100% 参考虚线和 45° 理想虚线在缩放后显示为宽色带的问题。阻尼力计算与导出数据未改动。"
+            --notes "Fix Audi item 20 reference dashes rendering as wide bands after plot scaling. Damping-force calculations and exported values are unchanged."
