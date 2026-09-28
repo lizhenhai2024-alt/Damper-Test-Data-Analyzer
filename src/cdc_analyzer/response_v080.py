@@ -16,6 +16,7 @@ AUDI_TARGET_SPEEDS_MPS = (0.052, 0.131, 0.262, 0.524)
 HONGQI_TARGET_SPEEDS_MPS = (0.131, 0.262, 0.524, 1.047)
 DOMESTIC_OEM_TARGET_SPEEDS_MPS = (0.1, 0.3, 0.6)
 LEAPMOTOR_TARGET_SPEEDS_MPS = (0.15, 0.70)
+MR_TARGET_SPEEDS_MPS = (0.13, 0.26, 0.52, 1.04)
 DEFAULT_TARGET_SPEED_TOLERANCE = _v074.DEFAULT_TARGET_SPEED_TOLERANCE
 
 
@@ -25,6 +26,7 @@ TARGET_SPEED_PRESETS = {
     ResponseStandard.HONGQI: HONGQI_TARGET_SPEEDS_MPS,
     ResponseStandard.DOMESTIC_OEM: DOMESTIC_OEM_TARGET_SPEEDS_MPS,
     ResponseStandard.LEAPMOTOR: LEAPMOTOR_TARGET_SPEEDS_MPS,
+    ResponseStandard.MAGNETORHEOLOGICAL: MR_TARGET_SPEEDS_MPS,
 }
 
 
@@ -175,6 +177,8 @@ def analyze_response_time_v080(
     result.settings["Analysis Mode"] = "Response Time V0.8.0"
     result.settings["Target Speeds m/s"] = ", ".join(f"{value:g}" for value in targets)
     result.settings["Target Speed Source"] = "operator configurable"
+    if config.standard == ResponseStandard.MAGNETORHEOLOGICAL:
+        result.settings["Current Range A"] = "0 - 5 (current steps are detected automatically from the measured signal)"
     result.settings["Velocity Estimator"] = (
         f"{_v075.VELOCITY_DISPLACEMENT_SMOOTH_MS:g} ms centered displacement smoothing + derivative"
     )

@@ -8,7 +8,7 @@
 - 编制：研发院技术中心　李振海
 - 发布日期：2026/9/7
 - 发布：第1版
-- 当前功能版本：`V0.9.8`
+- 当前功能版本：`V0.9.9`
 - Python package version：`1.0.0`
 - GitHub 仓库：[lizhenhai2024-alt/Damper-Test-Data-Analyzer](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer)
 
@@ -24,7 +24,7 @@
 - Window Mean：窗口比例可设置，基准固定为总行程全宽
 - Zero Crossing：目标位移线性插值
 - 气体反弹力支持“加上 / 减去”恒定修正，原始载荷永不覆盖
-- 响应分析提供 BMW、Audi、红旗、国内主机和零跑预设；红旗速度为 0.131/0.262/0.524/1.047 m/s，国内主机为 0.1/0.3/0.6 m/s，零跑为 0.15/0.70 m/s。目标速度仍可手动输入任意正有限值。
+- 响应分析提供 BMW、Audi、红旗、国内主机、零跑和磁流变预设；红旗速度为 0.131/0.262/0.524/1.047 m/s，国内主机为 0.1/0.3/0.6 m/s，零跑为 0.15/0.70 m/s，磁流变为 0.13/0.26/0.52/1.04 m/s（电流 0～5 A，从实测信号自动检测电流阶跃）。目标速度仍可手动输入任意正有限值。
 - 响应时间以用户设置的电流触发比例交点为零点；电流图的 I 下标随触发比例变化并定位在实际触发交点。起始载荷阈值默认 F₁%，可调整；t 起始响应时间使用相同下标。
 - F 起始阈值与 F₆₃% 可分别勾选是否在阻尼力图中显示；关闭后对应水平线、竖直响应线和时间文字同步隐藏。F₉₀% 与 F₁₀₀% 始终显示。
 - 响应图采用与轴标题同号的正常字重透明标注；载荷阈值标签位于左侧，参考虚线连续；竖虚线与实测曲线交点加圆点，载荷响应时间交替分布于曲线两侧。
@@ -47,6 +47,11 @@
 ## V0.9.1 全电流分析与 PVP/DCTW 批量分析
 
 V0.9.2 扩展电流文件名识别：除 `0.3A-2` 外，也支持试验台常见的 `0.3-A-2`、`0.3_A_2` 和带日期/样件编号前缀的名称；日期与 `FR30` 等编号不会被当作电流。V0.9.3 删除单文件添加入口，并将第21项横轴改为只显示实际试验速度点的 Audi 分类轴。V0.9.4 统一过滤文件头误识别的非试验速度，只保留 `0–1.047 m/s` 的有效速度段；F-V 与 F-I 曲线强制采用连续实线，并可通过“显示数据点”统一切换圆点。
+
+## V0.9.9 响应时间新增磁流变规范
+
+- 响应时间规范下拉列表新增「磁流变（MR）」Profile：目标速度预设 0.13 / 0.26 / 0.52 / 1.04 m/s，电流范围 0～5 A（电流阶跃从实测信号自动检测，无需手动配置）。
+- 选择磁流变规范后速度输入框自动载入预设；分析结果设置中记录电流范围说明，帮助页中英文同步更新。
 
 ## V0.9.8 全电流阻尼力取最后一个循环
 
@@ -133,7 +138,7 @@ pytest -q
 cdc-analyzer-gui
 ```
 
-Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.8.exe`。
+Windows 单文件 EXE 由 [Build Windows EXE](https://github.com/lizhenhai2024-alt/Damper-Test-Data-Analyzer/actions/workflows/build-windows.yml) 工作流自动构建，可在成功运行记录的 Artifacts 中下载。EXE 与 Artifact 文件名均包含软件版本，例如 `Damper_Test_Data_Analyzer_V0.9.9.exe`。
 
 ## CLI 示例
 

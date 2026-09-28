@@ -25,6 +25,7 @@ class DynamicPagesController(_V079DynamicPagesController):
             (ResponseStandard.HONGQI, "红旗", "Hongqi"),
             (ResponseStandard.DOMESTIC_OEM, "国内主机", "Domestic OEM"),
             (ResponseStandard.LEAPMOTOR, "零跑", "Leapmotor"),
+            (ResponseStandard.MAGNETORHEOLOGICAL, "磁流变", "MR"),
         ):
             self.response_standard.addItem(
                 self._text(zh_label, en_label), standard.value
@@ -70,6 +71,7 @@ class DynamicPagesController(_V079DynamicPagesController):
             (ResponseStandard.HONGQI, "红旗", "Hongqi"),
             (ResponseStandard.DOMESTIC_OEM, "国内主机", "Domestic OEM"),
             (ResponseStandard.LEAPMOTOR, "零跑", "Leapmotor"),
+            (ResponseStandard.MAGNETORHEOLOGICAL, "磁流变", "MR"),
         ):
             index = self.response_standard.findData(standard.value)
             if index >= 0:

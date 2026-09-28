@@ -13,6 +13,7 @@ from cdc_analyzer.response_v080 import (
     DOMESTIC_OEM_TARGET_SPEEDS_MPS,
     HONGQI_TARGET_SPEEDS_MPS,
     LEAPMOTOR_TARGET_SPEEDS_MPS,
+    MR_TARGET_SPEEDS_MPS,
     BMW_TARGET_SPEEDS_MPS,
     analyze_response_time_v080,
     default_target_speeds,
@@ -58,6 +59,7 @@ def test_bmw_default_response_speed_is_0131_not_00131():
         (ResponseStandard.HONGQI, (0.131, 0.262, 0.524, 1.047)),
         (ResponseStandard.DOMESTIC_OEM, (0.1, 0.3, 0.6)),
         (ResponseStandard.LEAPMOTOR, (0.15, 0.70)),
+        (ResponseStandard.MAGNETORHEOLOGICAL, (0.13, 0.26, 0.52, 1.04)),
     ],
 )
 def test_customer_response_speed_presets(standard, expected):
@@ -73,6 +75,18 @@ def test_named_customer_speed_constants_are_exact():
     assert HONGQI_TARGET_SPEEDS_MPS == (0.131, 0.262, 0.524, 1.047)
     assert DOMESTIC_OEM_TARGET_SPEEDS_MPS == (0.1, 0.3, 0.6)
     assert LEAPMOTOR_TARGET_SPEEDS_MPS == (0.15, 0.70)
+    assert MR_TARGET_SPEEDS_MPS == (0.13, 0.26, 0.52, 1.04)
+
+
+def test_magnetorheological_profile_reports_current_range():
+    result = analyze_response_time_v080(
+        _response_dataset(0.13),
+        ResponseConfig(standard=ResponseStandard.MAGNETORHEOLOGICAL),
+    )
+    assert not result.events.empty
+    assert float(result.events.iloc[0]["Target Velocity m/s"]) == pytest.approx(0.13)
+    assert "Current Range A" in result.settings
+    assert result.settings["Current Range A"].startswith("0 - 5")
 
 
 def test_custom_customer_target_speed_is_not_locked_to_oem_profile():
@@ -262,6 +276,7 @@ def test_v080_gui_exposes_editable_target_speed_list():
         "hongqi": ("红旗", "0.131, 0.262, 0.524, 1.047"),
         "domestic_oem": ("国内主机", "0.1, 0.3, 0.6"),
         "leapmotor": ("零跑", "0.15, 0.70"),
+        "magnetorheological": ("磁流变", "0.13, 0.26, 0.52, 1.04"),
     }
     for standard, (label, expected) in presets.items():
         index = pages.response_standard.findData(standard)

@@ -40,12 +40,12 @@ def _release_help_html(language: str) -> str:
         updated = base.replace("用于 CDC/电控减振器", "用于电控/半主动减振器")
         dynamic_help = """
         <h2>11. 响应时间 / Switching Time</h2>
-        <p>响应时间页提供 BMW、Audi、红旗、国内主机和零跑客户 Profile，选择后自动载入目标速度：红旗 0.131 / 0.262 / 0.524 / 1.047 m/s，国内主机 0.1 / 0.3 / 0.6 m/s，零跑 0.15 / 0.70 m/s。速度输入框保持可编辑，可输入任意大于 0 的客户速度点，例如 0.1、0.3、0.6、1.0 m/s；多个速度用逗号分隔。响应图可以选择三个同步时间图或双 Y 轴 I₁₀%→F₉₀% 图。</p>
+        <p>响应时间页提供 BMW、Audi、红旗、国内主机、零跑和磁流变客户 Profile，选择后自动载入目标速度：红旗 0.131 / 0.262 / 0.524 / 1.047 m/s，国内主机 0.1 / 0.3 / 0.6 m/s，零跑 0.15 / 0.70 m/s，磁流变 0.13 / 0.26 / 0.52 / 1.04 m/s（电流 0～5 A，从实测信号自动检测电流阶跃）。速度输入框保持可编辑，可输入任意大于 0 的客户速度点，例如 0.1、0.3、0.6、1.0 m/s；多个速度用逗号分隔。响应图可以选择三个同步时间图或双 Y 轴 I₁₀%→F₉₀% 图。</p>
         <ul>
           <li><b>计时基准：</b>电流触发比例可设置，默认 10% 时显示 I₁₀%；图中的 I 下标与设置一致并跟随实际触发交点。各响应时间均为相应力阈值交点时刻减去电流触发交点时刻，单位 ms。</li>
           <li><b>Audi：</b>计算 F₁% / F₆₃% / F₉₀% 力响应、死区时间和力梯度，并检查 4 kHz 采样要求。</li>
           <li><b>BMW：</b>支持软→硬、软→中、硬→中、硬→软设定值跳变，输出 t₆₃% 与 t₉₀%。提供可见的电流触发比例设置，因为当前导入的 BMW 摘录没有给出该触发百分比的规范定义。</li>
-          <li><b>红旗 / 国内主机 / 零跑：</b>当前按所选速度预设执行通用响应时间提取，并使用界面中设置的电流与载荷阈值；未提供的客户限值不会自动推断。</li>
+          <li><b>红旗 / 国内主机 / 零跑 / 磁流变：</b>当前按所选速度预设执行通用响应时间提取，并使用界面中设置的电流与载荷阈值；未提供的客户限值不会自动推断。</li>
           <li><b>图形标注：</b>起始载荷阈值默认 1% 并可调整，F 与 t 的下标同步使用设置值。F 起始阈值和 F₆₃% 可分别勾选显示；取消后对应参考线、交点和时间文字同步隐藏。文字为透明背景、正常字重，与坐标轴标题同为 10 pt。</li>
           <li><b>双 Y 轴阻尼力响应：</b>X 轴为时间，左侧蓝色轴与曲线表示电流，右侧红色轴与曲线表示阻尼力。两条竖虚线标记电流 I₁₀% 和阻尼力 F₉₀% 的线性插值时刻。电流曲线只显示 I₁₀% 交点，不显示 F₉₀% 时刻的电流交点和文字；阻尼力曲线显示两个时刻的交点。主响应时间为 t(F₉₀%) − t(I₁₀%)，与三联图一致。</li>
           <li><b>计算电流过冲：</b>勾选项默认开启；对电流过冲（上升超过终值）或电流下冲（下降低于终值）引起的瞬态力跌落进行识别。图中在电流曲线上标注 Iₘₐₓ= / Iₘᵢₙ= 电流极值（过冲率 &gt;10% 时附标注）与 I₁₀₀%= 电流满幅值。当响应被分类为“瞬态跌落-恢复型（Dip &amp; Recovery）”时，稳态力差不足，传统 t₆₃% / t₉₀% 不适用；图中明确标注并在计时上做门控处理，避免把瞬态跌落误判为真实响应时间。</li>
@@ -86,12 +86,12 @@ def _release_help_html(language: str) -> str:
         updated = base.replace("CDC/electronic damper", "electronically controlled / semi-active damper")
         dynamic_help = """
         <h2>10. Response Time / Switching Time</h2>
-        <p>The response page provides BMW, Audi, Hongqi, Domestic OEM and Leapmotor profiles. Their speed presets include Hongqi 0.131 / 0.262 / 0.524 / 1.047 m/s, Domestic OEM 0.1 / 0.3 / 0.6 m/s and Leapmotor 0.15 / 0.70 m/s. The speed field remains editable and accepts any positive values. The response plot can show three synchronized traces or a dual-axis I₁₀%→F₉₀% view.</p>
+        <p>The response page provides BMW, Audi, Hongqi, Domestic OEM, Leapmotor and Magnetorheological (MR) profiles. Their speed presets include Hongqi 0.131 / 0.262 / 0.524 / 1.047 m/s, Domestic OEM 0.1 / 0.3 / 0.6 m/s, Leapmotor 0.15 / 0.70 m/s and MR 0.13 / 0.26 / 0.52 / 1.04 m/s (current range 0 to 5 A; current steps are detected automatically from the measured signal). The speed field remains editable and accepts any positive values. The response plot can show three synchronized traces or a dual-axis I₁₀%→F₉₀% view.</p>
         <ul>
           <li><b>Timing reference:</b>The current trigger percentage is configurable; the default 10% setting is shown as I₁₀%. Its subscript follows the setting and its label follows the measured trigger intersection. Each response time is its force-threshold crossing time minus the current-trigger crossing time.</li>
           <li><b>Audi:</b>F₁% / F₆₃% / F₉₀% response, dead time and force gradients are reported; 4 kHz sampling is checked.</li>
           <li><b>BMW:</b>supports soft→hard, soft→medium, hard→medium and hard→soft setpoint changes and reports t₆₃% / t₉₀%. The current trigger fraction remains visible because the supplied BMW excerpt does not define that percentage.</li>
-          <li><b>Hongqi / Domestic OEM / Leapmotor:</b>use the selected speed preset with the common response extraction and operator-configured current/force thresholds. Customer limits are never inferred when they have not been supplied.</li>
+          <li><b>Hongqi / Domestic OEM / Leapmotor / MR:</b>use the selected speed preset with the common response extraction and operator-configured current/force thresholds. Customer limits are never inferred when they have not been supplied.</li>
           <li><b>Plot labels:</b>The initial force threshold defaults to 1% and is adjustable; the F and t subscripts follow its setting. The initial F threshold and F₆₃% can be shown independently. Clearing either option hides its guides, intersection and time label together. Labels use transparent, normal-weight 10 pt text.</li>
           <li><b>Dual-axis damping response:</b>Time is the X axis. The blue left axis and curve show current; the red right axis and curve show damping force. Two vertical dashed guides mark the linearly interpolated current I₁₀% and force F₉₀% times. The current curve shows only the I₁₀% intersection; its point and text at the F₉₀% time are hidden. The force curve retains both intersections. The primary result is t(F₉₀%) − t(I₁₀%), matching the three-panel plot.</li>
           <li><b>Current overshoot:</b> enabled by default; transient force dips caused by current overshoot (rise above target) or undershoot (fall below target) are detected. The current trace is annotated with Iₘₐₓ= / Iₘᵢₙ= extremes (overshoot % shown when &gt;10%) and the I₁₀₀%= full-scale level. If the response is classified as Dip &amp; Recovery, the steady-state force gap is insufficient and classical t₆₃% / t₉₀% do not apply. The plot annotates this and gates the response timing so a transient dip is not mistaken for the true response time.</li>

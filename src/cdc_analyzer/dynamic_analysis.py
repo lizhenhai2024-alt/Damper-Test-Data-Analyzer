@@ -24,6 +24,7 @@ class ResponseStandard(str, Enum):
     HONGQI = "hongqi"
     DOMESTIC_OEM = "domestic_oem"
     LEAPMOTOR = "leapmotor"
+    MAGNETORHEOLOGICAL = "magnetorheological"
 
 
 class HysteresisStandard(str, Enum):
