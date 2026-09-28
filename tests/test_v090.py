@@ -8,13 +8,13 @@ import pytest
 from cdc_analyzer import audi_items_20_21 as items
 
 
-def _synthetic_runs(current):
+def _synthetic_runs(current, repeat=1):
     runs = []
     for speed in (0.1, 0.3):
         phase = np.linspace(0, 8 * np.pi, 4001)
         displacement = 30 * np.sin(phase)
         velocity = np.cos(phase) * speed
-        magnitude = 200 + 800 * current + 500 * speed
+        magnitude = 200 + 800 * current + 500 * speed + 10 * repeat
         force = np.where(velocity >= 0, magnitude, -0.8 * magnitude)
         runs.append((speed, displacement, force, velocity))
     return runs
@@ -49,10 +49,19 @@ def test_items_20_21_calculation_and_repeat_handling(monkeypatch, tmp_path):
             path = tmp_path / f"{current:g}A-{repeat}.dctw"
             path.write_bytes(b"fixture")
             files.append(items.ImportedMapFile(path, current, "DCTW", 2, (0.1, 0.3)))
-    monkeypatch.setattr(items, "_parse_dctw", lambda path, current: _synthetic_runs(current))
+    monkeypatch.setattr(
+        items,
+        "_parse_dctw",
+        lambda path, current: _synthetic_runs(current, repeat=2 if path.name.endswith("-2.dctw") else 1),
+    )
     result = items.analyze_map_files(files, soft_current_a=0.0, hard_current_a=1.0)
     assert len(result.run_detail) == 12
     assert set(result.current_force_linearity["Repeat Count"]) == {2}
+    # Repeated measurements are no longer averaged: the last retained repeat
+    # (repeat 2) must be the reported damping force.
+    lin = result.current_force_linearity
+    rebound_zero = lin[(lin["Current A"] == 0.0) & (lin["Direction"] == "Rebound")]
+    assert rebound_zero["Force N"].sort_values().to_numpy() == pytest.approx([270.0, 370.0])
     for (_speed, direction), group in result.current_force_linearity.groupby(["Speed m/s", "Direction"]):
         ordered = group.sort_values("Current A")
         expected = [0.0, 0.5, 1.0] if direction == "Rebound" else [0.0, -0.5, -1.0]
@@ -91,4 +100,4 @@ def test_current_packaged_gui_is_v090():
     assert "gui_release_v095" in (root / "launcher.py").read_text()
     assert "gui_release_v095:main" in (root / "pyproject.toml").read_text()
     assert "olefile>=0.47" in (root / "pyproject.toml").read_text()
-    assert "APP_VERSION: V0.9.7" in (root / ".github" / "workflows" / "build-windows.yml").read_text()
+    assert "APP_VERSION: V0.9.8" in (root / ".github" / "workflows" / "build-windows.yml").read_text()

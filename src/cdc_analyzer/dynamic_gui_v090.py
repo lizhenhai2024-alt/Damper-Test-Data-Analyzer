@@ -237,8 +237,8 @@ class DynamicPagesController(_BaseController):
         self.refresh_map_plots()
         repeats = int(self.map_result.current_force_linearity["Repeat Count"].max())
         self.map_status.setText(self._text(
-            f"分析完成：{len(selected_files)} 个文件" + (f"（{skipped} 个未勾选已跳过），" if skipped else "，") + f"{len(self.map_result.run_detail)} 个有效速度段；同工况最多 {repeats} 次重复，按保留数据求均值。",
-            f"Analysis complete: {len(selected_files)} file(s)" + (f" ({skipped} unchecked skipped), " if skipped else ", ") + f"{len(self.map_result.run_detail)} valid speed runs; up to {repeats} retained repeats were averaged.",
+            f"分析完成：{len(selected_files)} 个文件" + (f"（{skipped} 个未勾选已跳过），" if skipped else "，") + f"{len(self.map_result.run_detail)} 个有效速度段；同工况最多 {repeats} 次重复，取最后一个重复。",
+            f"Analysis complete: {len(selected_files)} file(s)" + (f" ({skipped} unchecked skipped), " if skipped else ", ") + f"{len(self.map_result.run_detail)} valid speed runs; up to {repeats} retained repeats, the last repeat is used.",
         ))
 
     def refresh_map_plots(self):

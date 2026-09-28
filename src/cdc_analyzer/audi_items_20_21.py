@@ -448,8 +448,13 @@ def analyze_map_files(
     )
     long["Direction"] = long["Direction"].str.replace(" N", "", regex=False)
     long["Abs Force N"] = long["Force N"].abs()
+    # Each run already evaluates its last complete cycle (_evaluate_run uses the
+    # last detected cycle).  When the same current/speed/direction is repeated
+    # across several files, keep the last retained repeat instead of the mean so
+    # the reported damping force always refers to the most recent test run.
+    long = long.sort_values("Source File", kind="stable")
     grouped = long.groupby(["Current A", "Speed m/s", "Direction"], as_index=False).agg(
-        **{"Force N": ("Force N", "mean"), "Abs Force N": ("Abs Force N", "mean"), "Force SD N": ("Force N", lambda s: float(s.std(ddof=0))), "Repeat Count": ("Source File", "count")}
+        **{"Force N": ("Force N", "last"), "Abs Force N": ("Abs Force N", "last"), "Force SD N": ("Force N", lambda s: float(s.std(ddof=0))), "Repeat Count": ("Source File", "count")}
     )
     linearity_rows, spread_rows = [], []
     for (speed, direction), group in grouped.groupby(["Speed m/s", "Direction"], sort=True):
@@ -506,7 +511,7 @@ def analyze_map_files(
         force_velocity[column] = force_velocity[column].round().astype("Int64")
     return MapAnalysisResult(
         pd.DataFrame(file_rows), detail, pd.DataFrame(linearity_rows), pd.DataFrame(spread_rows), force_velocity,
-        {"Standard": "Audi VR-EF-33-2p5 sections 20/21", "Maximum Speed m/s": max_speed_mps, "Soft Current A": soft_current_a, "Hard Current A": hard_current_a, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema", "Current Source": "automatically parsed from every filename", "Repeat Handling": "mean of retained files at equal current/speed/direction"},
+        {"Standard": "Audi VR-EF-33-2p5 sections 20/21", "Maximum Speed m/s": max_speed_mps, "Soft Current A": soft_current_a, "Hard Current A": hard_current_a, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema", "Current Source": "automatically parsed from every filename", "Repeat Handling": "last retained repeat at equal current/speed/direction (last complete cycle of the last file)"},
     )
 
 
