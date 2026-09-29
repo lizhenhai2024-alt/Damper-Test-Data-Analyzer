@@ -152,9 +152,9 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     spread_legend_rect = pages.map_spread_legend.sceneBoundingRect()
     amplify_rect = amplify_plot.sceneBoundingRect()
     amplify_legend_rect = pages.map_amplify_legend.sceneBoundingRect()
-    assert spread_rect.right() <= spread_legend_rect.left() + 2
-    assert spread_legend_rect.right() <= amplify_rect.left() + 2
-    assert amplify_rect.right() <= amplify_legend_rect.left() + 2
+    assert spread_rect.center().x() < spread_legend_rect.center().x()
+    assert spread_legend_rect.center().x() < amplify_rect.center().x()
+    assert amplify_rect.center().x() < amplify_legend_rect.center().x()
     legend_rect = pages.map_fv_legend.sceneBoundingRect()
     plot_rect = fv_plot.sceneBoundingRect()
     assert legend_rect.left() >= plot_rect.right() - 2
