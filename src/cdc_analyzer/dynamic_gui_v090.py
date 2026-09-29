@@ -262,7 +262,7 @@ class DynamicPagesController(_BaseController):
         self._map_plot_style(linearity, self._text("归一化阻尼力差", "Normalized damping-force difference"), None, self._text("电流", "Current"), "A")
         linearity.setTitle(self._text("第20项：电流—阻尼力线性", "Item 20: current–force linearity"), color="#202020", size="11pt")
         linearity.showGrid(x=True, y=True, alpha=0.15)
-        legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt")
+        legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt", labelTextColor="#263238", verSpacing=2)
         legend.setBrush(self.pg.mkBrush(255, 255, 255))
         self.map_linearity_plot.addItem(legend, row=0, col=1)
         self.map_linearity_legend = legend
@@ -270,7 +270,9 @@ class DynamicPagesController(_BaseController):
         self.map_linearity_plot.ci.layout.setColumnStretchFactor(1, 1)
         raw = self.map_result.current_force_linearity
         item20_speeds = sorted(raw["Speed m/s"].unique())
-        speed_colors = {speed: self.pg.intColor(index, hues=max(1, len(item20_speeds))) for index, speed in enumerate(item20_speeds)}
+        item20_colors = ("#b71c1c", "#0d47a1", "#2e7d32", "#6a1b9a", "#bf360c", "#006064", "#ad1457", "#4e342e")
+        speed_colors = {speed: item20_colors[index % len(item20_colors)] for index, speed in enumerate(item20_speeds)}
+        point_symbol = "o" if self.map_show_points.isChecked() else None
         for ((speed, direction), group) in raw.groupby(["Speed m/s", "Direction"], sort=True):
             group = group.sort_values("Current A")
             color = speed_colors[speed]
@@ -278,7 +280,7 @@ class DynamicPagesController(_BaseController):
             pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
             curve = linearity.plot(
                 group["Current A"].to_numpy(float), group["Normalized Force"].to_numpy(float),
-                pen=pen, symbol="o", symbolSize=6,
+                pen=pen, symbol=point_symbol, symbolSize=6, symbolBrush=color, symbolPen=color,
             )
             if direction == "Rebound":
                 legend.addItem(curve, self._text(f"{speed:g} m/s", f"{speed:g} m/s"))
@@ -290,10 +292,14 @@ class DynamicPagesController(_BaseController):
         band_pen = self._dash_pen("#b0bec5", 1.2, (16, 12))
         linearity.addLine(y=1.0, pen=band_pen)
         linearity.addLine(y=-1.0, pen=band_pen)
-        ideal_pen = self._dash_pen("#1565c0", 1.8, (16, 12))
+        ideal_pen = self._dash_pen("#455a64", 1.8, (16, 12))
         ideal_curve = linearity.plot([soft_current, hard_current], [0.0, 1.0], pen=ideal_pen)
         legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
         linearity.plot([soft_current, hard_current], [0.0, -1.0], pen=ideal_pen)
+        for _sample, label in legend.items:
+            legend.layout.setAlignment(label, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        legend.setFixedHeight(22 * len(legend.items) + 8)
+        self.map_linearity_plot.ci.layout.setAlignment(legend, QtCore.Qt.AlignmentFlag.AlignTop)
 
         spread_data = self.map_result.spread_amplification
         directions = [direction for direction in ("Rebound", "Compression") if direction in set(spread_data["Direction"])]

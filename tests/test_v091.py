@@ -113,6 +113,8 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert all(curve.opts["pen"].isCosmetic() for curve in dashed)
     solid = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine]
     assert len(solid) == 4
+    assert all(curve.opts["symbol"] == "o" for curve in solid)
+    assert {curve.opts["pen"].color().name() for curve in solid} == {"#b71c1c", "#0d47a1"}
     tick_levels = linearity.getAxis("left")._tickLevels
     assert tick_levels is not None
     tick_strings = {s for level in tick_levels for _v, s in level}
@@ -135,6 +137,9 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert all(curve.opts["symbol"] == "o" for curve in fv_curves + fi_curves)
     pages.map_show_points.setChecked(False)
     app.processEvents()
+    linearity = pages.map_linearity_plot.getItem(0, 0)
+    solid = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine]
+    assert all(curve.opts["symbol"] is None for curve in solid)
     fv_curves = pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
     fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
     assert all(curve.opts["symbol"] is None for curve in fv_curves + fi_curves)
@@ -146,6 +151,12 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     window.show()
     for _ in range(3):
         app.processEvents()
+    linearity = pages.map_linearity_plot.getItem(0, 0)
+    linearity_legend = pages.map_linearity_legend
+    assert linearity_legend.height() < linearity.height() * 0.7
+    assert linearity_legend.sceneBoundingRect().top() <= linearity.sceneBoundingRect().top() + 10
+    for sample, label in linearity_legend.items:
+        assert abs(sample.sceneBoundingRect().center().y() - label.sceneBoundingRect().center().y()) < 5
     legend_rect = pages.map_fv_legend.sceneBoundingRect()
     plot_rect = fv_plot.sceneBoundingRect()
     assert legend_rect.left() >= plot_rect.right() - 2
