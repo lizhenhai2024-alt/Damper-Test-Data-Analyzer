@@ -311,7 +311,7 @@ class DynamicPagesController(_BaseController):
         width = 0.55
         spread_legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt")
         spread_legend.setBrush(self.pg.mkBrush(255, 255, 255))
-        self.map_spread_plot.addItem(spread_legend, row=0, col=2)
+        self.map_spread_plot.addItem(spread_legend, row=0, col=1)
         self.map_spread_legend = spread_legend
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
@@ -327,7 +327,7 @@ class DynamicPagesController(_BaseController):
                 spread.addItem(label)
         spread.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
 
-        amplify = self.map_spread_plot.addPlot(row=0, col=1)
+        amplify = self.map_spread_plot.addPlot(row=0, col=2)
         self._map_plot_style(amplify, self._text("放大倍数", "Amplification"), None, self._text("速度", "Speed"), "m/s")
         amplify.setTitle(self._text("第21项：放大倍数", "Item 21: amplification"), color="#202020", size="11pt")
         amplify.showGrid(x=True, y=True, alpha=0.15)
@@ -350,8 +350,8 @@ class DynamicPagesController(_BaseController):
                 amplify.addItem(label)
         amplify.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
         self.map_spread_plot.ci.layout.setColumnStretchFactor(0, 3)
-        self.map_spread_plot.ci.layout.setColumnStretchFactor(1, 3)
-        self.map_spread_plot.ci.layout.setColumnStretchFactor(2, 1)
+        self.map_spread_plot.ci.layout.setColumnStretchFactor(1, 1)
+        self.map_spread_plot.ci.layout.setColumnStretchFactor(2, 3)
         self.map_spread_plot.ci.layout.setColumnStretchFactor(3, 1)
 
         raw = self.map_result.current_force_linearity
