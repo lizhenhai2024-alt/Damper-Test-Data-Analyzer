@@ -13,6 +13,7 @@ from .audi_items_20_21 import (
     export_map_analysis_xlsx,
     inspect_map_file,
 )
+from .audi_test_program import AudiSpecimen, compile_audi_test_report
 from .dynamic_gui_v085 import DynamicPagesController as _BaseController
 
 
@@ -27,7 +28,90 @@ class DynamicPagesController(_BaseController):
         self.map_fi_legend = None
         super().__init__(*args, **kwargs)
         self._build_map_page()
+        self._build_audi_program_page()
         self._v090_language()
+
+    def _build_audi_program_page(self):
+        self.audi_program_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_program_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_program_type_label = QtWidgets.QLabel()
+        self.audi_program_type = QtWidgets.QComboBox()
+        self.audi_program_type.addItem("", True)
+        self.audi_program_type.addItem("", False)
+        self.audi_program_type.currentIndexChanged.connect(self.refresh_audi_program)
+        self.audi_program_refresh = QtWidgets.QPushButton()
+        self.audi_program_refresh.clicked.connect(self.refresh_audi_program)
+        self.audi_program_export = QtWidgets.QPushButton()
+        self.audi_program_export.clicked.connect(self.export_audi_program)
+        controls.addWidget(self.audi_program_type_label)
+        controls.addWidget(self.audi_program_type)
+        controls.addWidget(self.audi_program_refresh)
+        controls.addWidget(self.audi_program_export)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_program_note = QtWidgets.QLabel()
+        self.audi_program_note.setWordWrap(True)
+        root.addWidget(self.audi_program_note)
+        self.audi_program_table = self._new_table()
+        self.audi_program_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.audi_program_table.cellDoubleClicked.connect(self._open_audi_section)
+        root.addWidget(self.audi_program_table, 1)
+        self.window.tabs.addTab(self.audi_program_page, "")
+        self.refresh_audi_program()
+
+    def refresh_audi_program(self):
+        if not hasattr(self, "audi_program_table"):
+            return
+        records = []
+        if self.response_result is not None and self.response_result.settings.get("OEM Profile") == "audi":
+            records.append({"section": "18", "evidence": str(self.response_result.source_path)})
+        if self.hysteresis_result is not None and self.hysteresis_result.settings.get("OEM Profile") == "audi":
+            records.append({"section": "19", "evidence": str(self.hysteresis_result.source_path)})
+        if self.map_result is not None:
+            evidence = "; ".join(self.map_result.files["File"].astype(str))
+            records.extend(({"section": section, "evidence": evidence}) for section in ("20", "21"))
+        report = compile_audi_test_report(AudiSpecimen(regulated=bool(self.audi_program_type.currentData())), records)
+        self.audi_program_report = report
+        table = self.audi_program_table
+        table.setRowCount(len(report))
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels((
+            self._text("章节", "Section"), self._text("规范试验", "Standard test"),
+            self._text("适用", "Applies"), self._text("分析/证据", "Analysis / evidence"),
+        ))
+        for row_index, row in enumerate(report.itertuples(index=False)):
+            applies = row.Applicable
+            scope = self._text("待核实", "Verify") if applies is None else self._text("是", "Yes") if applies else self._text("否", "No")
+            analysis = row.Evidence or (self._text("已有相关分析入口", "Related analyzer available") if row.Analyzer != "manual evidence" else self._text("待接入数据或人工证据", "Data or manual evidence needed"))
+            for column, value in enumerate((row.Section, row.Test, scope, analysis)):
+                table.setItem(row_index, column, QtWidgets.QTableWidgetItem(str(value)))
+        table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Stretch)
+
+    def _open_audi_section(self, row: int, _column: int):
+        section = self.audi_program_report.iloc[row]["Section"]
+        if section == "4":
+            self.window.tabs.setCurrentWidget(self.window.plot_page)
+        elif section == "18":
+            self.window.tabs.setCurrentWidget(self.response_page)
+        elif section == "19":
+            self.window.tabs.setCurrentWidget(self.hysteresis_page)
+        elif section in {"20", "21"}:
+            self.window.tabs.setCurrentWidget(self.map_page)
+            self.map_views.setCurrentIndex(0 if section == "20" else 1)
+
+    def export_audi_program(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self.window, self._text("导出 AUDI 试验清单", "Export Audi test program"),
+            "AUDI_VR-EF-33-2_v2.5_test_program.xlsx", "Excel (*.xlsx)",
+        )
+        if not path:
+            return
+        self.refresh_audi_program()
+        report = self.audi_program_report.copy()
+        report.insert(0, "Standard", "AUDI VR-EF-33-2 v2.5 (2020-07-30)")
+        report.to_excel(Path(path).with_suffix(".xlsx"), index=False)
 
     def _build_map_page(self):
         self.map_page = QtWidgets.QWidget()
@@ -100,6 +184,18 @@ class DynamicPagesController(_BaseController):
     def _v090_language(self):
         if not hasattr(self, "map_page"):
             return
+        if hasattr(self, "audi_program_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_program_page), self._text("AUDI 试验顺序", "Audi test program"))
+            self.audi_program_type_label.setText(self._text("减振器类型", "Damper type"))
+            self.audi_program_type.setItemText(0, self._text("可调", "Regulated"))
+            self.audi_program_type.setItemText(1, self._text("常规", "Conventional"))
+            self.audi_program_refresh.setText(self._text("刷新分析状态", "Refresh analysis"))
+            self.audi_program_export.setText(self._text("导出规范顺序清单", "Export ordered program"))
+            self.audi_program_note.setText(self._text(
+                "依据 AUDI VR-EF-33-2 v2.5 第1章适用范围和第4–22章顺序；按本项目范围排除第5、7、9–12章耐久类试验。条件项目需结合结构和项目要求核实；未录入项目限值时不判定合格。",
+                "Audi VR-EF-33-2 v2.5 order, excluding durability sections 5, 7 and 9–12 for this project. Confirm conditional tests against the design and project requirements; no pass/fail without project limits.",
+            ))
+            self.refresh_audi_program()
         self.map_folder_button.setText(self._text("选择全电流数据文件夹…", "Select full-current data folder…"))
         self.map_remove_button.setText(self._text("移除所选数据", "Remove selected data"))
         self.map_soft_label.setText(self._text("软电流", "Soft current"))
@@ -262,7 +358,7 @@ class DynamicPagesController(_BaseController):
         self._map_plot_style(linearity, self._text("归一化阻尼力差", "Normalized damping-force difference"), None, self._text("电流", "Current"), "A")
         linearity.setTitle(self._text("第20项：电流—阻尼力线性", "Item 20: current–force linearity"), color="#202020", size="11pt")
         linearity.showGrid(x=True, y=True, alpha=0.15)
-        legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt")
+        legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt", labelTextColor="#263238", verSpacing=2)
         legend.setBrush(self.pg.mkBrush(255, 255, 255))
         self.map_linearity_plot.addItem(legend, row=0, col=1)
         self.map_linearity_legend = legend
@@ -270,7 +366,9 @@ class DynamicPagesController(_BaseController):
         self.map_linearity_plot.ci.layout.setColumnStretchFactor(1, 1)
         raw = self.map_result.current_force_linearity
         item20_speeds = sorted(raw["Speed m/s"].unique())
-        speed_colors = {speed: self.pg.intColor(index, hues=max(1, len(item20_speeds))) for index, speed in enumerate(item20_speeds)}
+        item20_colors = ("#b71c1c", "#0d47a1", "#2e7d32", "#6a1b9a", "#bf360c", "#006064", "#ad1457", "#4e342e")
+        speed_colors = {speed: item20_colors[index % len(item20_colors)] for index, speed in enumerate(item20_speeds)}
+        point_symbol = "o" if self.map_show_points.isChecked() else None
         for ((speed, direction), group) in raw.groupby(["Speed m/s", "Direction"], sort=True):
             group = group.sort_values("Current A")
             color = speed_colors[speed]
@@ -278,7 +376,7 @@ class DynamicPagesController(_BaseController):
             pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
             curve = linearity.plot(
                 group["Current A"].to_numpy(float), group["Normalized Force"].to_numpy(float),
-                pen=pen, symbol="o", symbolSize=6,
+                pen=pen, symbol=point_symbol, symbolSize=6, symbolBrush=color, symbolPen=color,
             )
             if direction == "Rebound":
                 legend.addItem(curve, self._text(f"{speed:g} m/s", f"{speed:g} m/s"))
@@ -290,10 +388,14 @@ class DynamicPagesController(_BaseController):
         band_pen = self._dash_pen("#b0bec5", 1.2, (16, 12))
         linearity.addLine(y=1.0, pen=band_pen)
         linearity.addLine(y=-1.0, pen=band_pen)
-        ideal_pen = self._dash_pen("#1565c0", 1.8, (16, 12))
+        ideal_pen = self._dash_pen("#455a64", 1.8, (16, 12))
         ideal_curve = linearity.plot([soft_current, hard_current], [0.0, 1.0], pen=ideal_pen)
         legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
         linearity.plot([soft_current, hard_current], [0.0, -1.0], pen=ideal_pen)
+        for _sample, label in legend.items:
+            legend.layout.setAlignment(label, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        legend.setFixedHeight(22 * len(legend.items) + 8)
+        self.map_linearity_plot.ci.layout.setAlignment(legend, QtCore.Qt.AlignmentFlag.AlignTop)
 
         spread_data = self.map_result.spread_amplification
         directions = [direction for direction in ("Rebound", "Compression") if direction in set(spread_data["Direction"])]
@@ -311,7 +413,7 @@ class DynamicPagesController(_BaseController):
         width = 0.55
         spread_legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt")
         spread_legend.setBrush(self.pg.mkBrush(255, 255, 255))
-        self.map_spread_plot.addItem(spread_legend, row=0, col=2)
+        self.map_spread_plot.addItem(spread_legend, row=0, col=1)
         self.map_spread_legend = spread_legend
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
@@ -327,7 +429,7 @@ class DynamicPagesController(_BaseController):
                 spread.addItem(label)
         spread.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
 
-        amplify = self.map_spread_plot.addPlot(row=0, col=1)
+        amplify = self.map_spread_plot.addPlot(row=0, col=2)
         self._map_plot_style(amplify, self._text("放大倍数", "Amplification"), None, self._text("速度", "Speed"), "m/s")
         amplify.setTitle(self._text("第21项：放大倍数", "Item 21: amplification"), color="#202020", size="11pt")
         amplify.showGrid(x=True, y=True, alpha=0.15)
@@ -350,8 +452,8 @@ class DynamicPagesController(_BaseController):
                 amplify.addItem(label)
         amplify.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
         self.map_spread_plot.ci.layout.setColumnStretchFactor(0, 3)
-        self.map_spread_plot.ci.layout.setColumnStretchFactor(1, 3)
-        self.map_spread_plot.ci.layout.setColumnStretchFactor(2, 1)
+        self.map_spread_plot.ci.layout.setColumnStretchFactor(1, 1)
+        self.map_spread_plot.ci.layout.setColumnStretchFactor(2, 3)
         self.map_spread_plot.ci.layout.setColumnStretchFactor(3, 1)
 
         raw = self.map_result.current_force_linearity
