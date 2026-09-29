@@ -120,12 +120,14 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     hundred_lines = [it for it in linearity.items if isinstance(it, pg.InfiniteLine) and abs(abs(it.getPos()[1]) - 1.0) < 1e-9]
     assert len(hundred_lines) == 2
     assert all(line.pen.isCosmetic() for line in hundred_lines)
-    assert pages.map_spread_plot.getItem(0, 0) is not None
-    assert pages.map_spread_plot.getItem(0, 1) is not None
-    bars = [item for item in pages.map_spread_plot.getItem(0, 0).items if isinstance(item, pg.BarGraphItem)]
+    spread_plot = pages.map_spread_plot.getItem(0, 0)
+    amplify_plot = pages.map_spread_plot.getItem(0, 2)
+    assert pages.map_spread_plot.getItem(0, 1) is pages.map_spread_legend
+    assert pages.map_spread_plot.getItem(0, 3) is pages.map_amplify_legend
+    bars = [item for item in spread_plot.items if isinstance(item, pg.BarGraphItem)]
     assert len(bars) == 2
     assert all(np.asarray(bar.opts["x"]) == pytest.approx([0.0, 1.0]) for bar in bars)
-    amp_curves = pages.map_spread_plot.getItem(0, 1).listDataItems()
+    amp_curves = amplify_plot.listDataItems()
     assert len(amp_curves) == 2
     fv_curves = pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
     fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
@@ -146,6 +148,13 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     window.show()
     for _ in range(3):
         app.processEvents()
+    spread_rect = spread_plot.sceneBoundingRect()
+    spread_legend_rect = pages.map_spread_legend.sceneBoundingRect()
+    amplify_rect = amplify_plot.sceneBoundingRect()
+    amplify_legend_rect = pages.map_amplify_legend.sceneBoundingRect()
+    assert spread_rect.center().x() < spread_legend_rect.center().x()
+    assert spread_legend_rect.center().x() < amplify_rect.center().x()
+    assert amplify_rect.center().x() < amplify_legend_rect.center().x()
     legend_rect = pages.map_fv_legend.sceneBoundingRect()
     plot_rect = fv_plot.sceneBoundingRect()
     assert legend_rect.left() >= plot_rect.right() - 2
