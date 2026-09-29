@@ -47,7 +47,7 @@ AUDI_TESTS: tuple[AudiTest, ...] = (
     AudiTest("14", "发泡试验"),
     AudiTest("15", "阻尼力迟滞与不连续性"),
     AudiTest("16", "边缘敏感性", scope="regulated", analyzer="edge_sensitivity"),
-    AudiTest("17", "频率响应"),
+    AudiTest("17", "频率响应", analyzer="frequency_response"),
     AudiTest("18", "切换时间", scope="regulated", analyzer="response"),
     AudiTest("19", "切换迟滞", scope="regulated", analyzer="switch_hysteresis"),
     AudiTest("20", "电流—阻尼力线性", scope="regulated", analyzer="current_map"),

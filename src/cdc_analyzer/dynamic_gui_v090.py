@@ -16,6 +16,7 @@ from .audi_items_20_21 import (
 )
 from .audi_test_program import AudiSpecimen, compile_audi_test_report
 from .audi_edge_sensitivity import analyze_edge_sensitivity
+from .audi_frequency_response import FREQUENCIES_HZ, SPEEDS_M_S, analyze_frequency_step, compile_frequency_response
 from .dynamic_analysis import DISP, LOAD, TIME, VELOCITY, load_dynamic_test_data
 from .dynamic_gui_v085 import DynamicPagesController as _BaseController
 
@@ -26,6 +27,8 @@ class DynamicPagesController(_BaseController):
         self.map_result = None
         self.audi_edge_result = None
         self.audi_edge_path = None
+        self.audi_frequency_steps = {}
+        self.audi_frequency_sources = {}
         self.map_linearity_legend = None
         self.map_spread_legend = None
         self.map_amplify_legend = None
@@ -35,6 +38,7 @@ class DynamicPagesController(_BaseController):
         self._build_map_page()
         self._build_audi_program_page()
         self._build_audi_edge_page()
+        self._build_audi_frequency_page()
         self._v090_language()
 
     def _build_audi_program_page(self):
@@ -79,6 +83,8 @@ class DynamicPagesController(_BaseController):
             records.extend(({"section": section, "evidence": evidence}) for section in ("20", "21"))
         if self.audi_edge_result is not None and self.audi_edge_path is not None:
             records.append({"section": "16", "evidence": str(self.audi_edge_path)})
+        if self.audi_frequency_steps:
+            records.append({"section": "17", "evidence": f"{len(self.audi_frequency_steps)} frequency blocks loaded"})
         report = compile_audi_test_report(AudiSpecimen(regulated=bool(self.audi_program_type.currentData())), records)
         self.audi_program_report = report
         table = self.audi_program_table
@@ -110,6 +116,114 @@ class DynamicPagesController(_BaseController):
             self.map_views.setCurrentIndex(0 if section == "20" else 1)
         elif section == "16":
             self.window.tabs.setCurrentWidget(self.audi_edge_page)
+        elif section == "17":
+            self.window.tabs.setCurrentWidget(self.audi_frequency_page)
+
+    def _build_audi_frequency_page(self):
+        self.audi_frequency_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_frequency_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_frequency_current = QtWidgets.QComboBox()
+        for current in ("soft", "medium", "passive"):
+            self.audi_frequency_current.addItem(current, current)
+        self.audi_frequency_speed = QtWidgets.QComboBox()
+        for speed in SPEEDS_M_S:
+            self.audi_frequency_speed.addItem(f"{speed:g} m/s", speed)
+        self.audi_frequency_hz = QtWidgets.QComboBox()
+        for frequency in FREQUENCIES_HZ:
+            self.audi_frequency_hz.addItem(f"{frequency} Hz", frequency)
+        self.audi_frequency_open = QtWidgets.QPushButton()
+        self.audi_frequency_open.clicked.connect(self.open_audi_frequency_file)
+        self.audi_frequency_export = QtWidgets.QPushButton()
+        self.audi_frequency_export.clicked.connect(self.export_audi_frequency)
+        for widget in (self.audi_frequency_current, self.audi_frequency_speed, self.audi_frequency_hz, self.audi_frequency_open, self.audi_frequency_export):
+            controls.addWidget(widget)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_frequency_status = QtWidgets.QLabel()
+        self.audi_frequency_status.setWordWrap(True)
+        root.addWidget(self.audi_frequency_status)
+        self.audi_frequency_table = self._new_table()
+        root.addWidget(self.audi_frequency_table, 1)
+        self.audi_frequency_plot = self.pg.GraphicsLayoutWidget()
+        self.audi_frequency_plot.setBackground("#ffffff")
+        root.addWidget(self.audi_frequency_plot, 1)
+        self.audi_frequency_current.currentIndexChanged.connect(self._refresh_audi_frequency_plot)
+        self.audi_frequency_speed.currentIndexChanged.connect(self._refresh_audi_frequency_plot)
+        self.window.tabs.addTab(self.audi_frequency_page, "")
+        self._refresh_audi_frequency_table()
+
+    def _refresh_audi_frequency_table(self):
+        table = self.audi_frequency_table
+        table.setRowCount(len(self.audi_frequency_steps))
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(("Current", "Speed m/s", "Hz", "Loss angle °", "Dynamic N/mm", "Elastic N/mm", "Damping Ns/mm"))
+        for row, (key, result) in enumerate(sorted(self.audi_frequency_steps.items(), key=lambda item: (item[0][0], item[0][1], -item[0][2]))):
+            values = (key[0], f"{key[1]:g}", str(key[2]), f"{result.loss_angle_deg:.3f}",
+                      f"{result.dynamic_stiffness_n_mm:.3f}", f"{result.elastic_stiffness_n_mm:.3f}", f"{result.damping_constant_ns_mm:.4f}")
+            for column, value in enumerate(values):
+                table.setItem(row, column, QtWidgets.QTableWidgetItem(value))
+        required = 150 if bool(self.audi_program_type.currentData()) else 75
+        self.audi_frequency_status.setText(self._text(
+            f"已加载 {len(self.audi_frequency_steps)}/{required} 个十循环频率段；每段需要 4 kHz 原始位移与力。导出时检查完整性；预处理、温度、电流和项目限值需凭试验记录核实。",
+            f"Loaded {len(self.audi_frequency_steps)}/{required} ten-cycle blocks at 4 kHz. Export checks completeness; verify preconditioning, temperature, current and project limits from the test record.",
+        ))
+        self._refresh_audi_frequency_plot()
+
+    def _refresh_audi_frequency_plot(self):
+        if not hasattr(self, "audi_frequency_plot"):
+            return
+        self.audi_frequency_plot.clear()
+        current = str(self.audi_frequency_current.currentData())
+        speed = float(self.audi_frequency_speed.currentData())
+        selected = sorted(((frequency, result) for (state, target, frequency), result in self.audi_frequency_steps.items()
+                           if state == current and target == speed), reverse=True)
+        axes = (
+            ("Loss angle", "deg", "loss_angle_deg"),
+            ("Dynamic stiffness", "N/mm", "dynamic_stiffness_n_mm"),
+            ("Elastic stiffness", "N/mm", "elastic_stiffness_n_mm"),
+            ("Damping constant", "Ns/mm", "damping_constant_ns_mm"),
+        )
+        for index, (title, unit, field) in enumerate(axes):
+            plot = self.audi_frequency_plot.addPlot(row=index // 2, col=index % 2, title=title)
+            plot.setLabel("bottom", "Frequency", units="Hz")
+            plot.setLabel("left", title, units=unit)
+            if selected:
+                plot.plot([frequency for frequency, _ in selected], [getattr(result, field) for _, result in selected],
+                          pen=self.pg.mkPen("#1565c0", width=2), symbol="o", symbolBrush="#1565c0")
+
+    def open_audi_frequency_file(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.window, self._text("选择第17章十循环频率段", "Select section 17 ten-cycle block"),
+            "", "Test data (*.dat *.csv *.xlsx *.xlsm)",
+        )
+        if not path:
+            return
+        key = (str(self.audi_frequency_current.currentData()), float(self.audi_frequency_speed.currentData()), int(self.audi_frequency_hz.currentData()))
+        try:
+            dataset = load_dynamic_test_data(path)
+            result = analyze_frequency_step(dataset.data, frequency_hz=key[2], target_speed_m_s=key[1])
+        except (ValueError, OSError) as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("第17章数据不符合要求", "Section 17 data rejected"), str(exc))
+            return
+        self.audi_frequency_steps[key] = result
+        self.audi_frequency_sources[key] = str(Path(path))
+        self._refresh_audi_frequency_table()
+        self.refresh_audi_program()
+
+    def export_audi_frequency(self):
+        try:
+            report = compile_frequency_response(self.audi_frequency_steps, regulated=bool(self.audi_program_type.currentData()))
+        except ValueError as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("频率段不完整", "Incomplete frequency sweep"), str(exc))
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self.window, self._text("导出第17章频率响应", "Export section 17 frequency response"), "AUDI_section_17.xlsx", "Excel (*.xlsx)")
+        if path:
+            report["Source file"] = [
+                self.audi_frequency_sources[(str(row["Current"]), float(row["Target speed m/s"]), int(row["Frequency Hz"]))]
+                for _, row in report.iterrows()
+            ]
+            report.to_excel(Path(path).with_suffix(".xlsx"), index=False)
 
     def _build_audi_edge_page(self):
         self.audi_edge_page = QtWidgets.QWidget()
@@ -293,6 +407,11 @@ class DynamicPagesController(_BaseController):
             self.audi_edge_export.setText(self._text("导出结果…", "Export result…"))
             if self.audi_edge_result is None:
                 self.audi_edge_status.setText(self._text("导入从伸张端静止起步、首次运动为压缩的 5 个完整循环；规范条件由试验记录核实。", "Import five complete cycles starting at rest from extension, moving first in compression. Verify test conditions in the test record."))
+        if hasattr(self, "audi_frequency_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_frequency_page), self._text("17 频率响应", "17 Frequency response"))
+            self.audi_frequency_open.setText(self._text("加入十循环数据…", "Add ten-cycle block…"))
+            self.audi_frequency_export.setText(self._text("导出完整结果…", "Export complete result…"))
+            self._refresh_audi_frequency_table()
         self.map_folder_button.setText(self._text("选择全电流数据文件夹…", "Select full-current data folder…"))
         self.map_remove_button.setText(self._text("移除所选数据", "Remove selected data"))
         self.map_soft_label.setText(self._text("软电流", "Soft current"))
