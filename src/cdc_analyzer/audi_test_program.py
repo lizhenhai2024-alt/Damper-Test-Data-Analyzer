@@ -30,7 +30,7 @@ class AudiTest:
 AUDI_TESTS: tuple[AudiTest, ...] = (
     AudiTest("4", "常温特性曲线", analyzer="force_curve"),
     AudiTest("5", "里程后特性曲线"),
-    AudiTest("6", "高活塞速度特性曲线"),
+    AudiTest("6", "高活塞速度特性曲线", analyzer="high_speed"),
     AudiTest("7", "热、耐久与冷态特性曲线"),
     AudiTest("8.1", "无侧向力摩擦"),
     AudiTest("8.2", "有侧向力摩擦"),
@@ -44,7 +44,7 @@ AUDI_TESTS: tuple[AudiTest, ...] = (
     AudiTest("13.1", "动态低温密封"),
     AudiTest("13.2", "静态低温密封", scope="monotube_or_project"),
     AudiTest("13.3", "近用户工况低温密封", scope="monotube_or_project"),
-    AudiTest("14", "发泡试验"),
+    AudiTest("14", "发泡试验", analyzer="foaming_review"),
     AudiTest("15", "阻尼力迟滞与不连续性"),
     AudiTest("16", "边缘敏感性", scope="regulated", analyzer="edge_sensitivity"),
     AudiTest("17", "频率响应", analyzer="frequency_response"),
