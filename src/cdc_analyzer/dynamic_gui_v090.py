@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from pandas import ExcelWriter
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .audi_items_20_21 import (
@@ -14,6 +15,8 @@ from .audi_items_20_21 import (
     inspect_map_file,
 )
 from .audi_test_program import AudiSpecimen, compile_audi_test_report
+from .audi_edge_sensitivity import analyze_edge_sensitivity
+from .dynamic_analysis import DISP, LOAD, TIME, VELOCITY, load_dynamic_test_data
 from .dynamic_gui_v085 import DynamicPagesController as _BaseController
 
 
@@ -21,6 +24,8 @@ class DynamicPagesController(_BaseController):
     def __init__(self, *args, **kwargs):
         self.map_files: list[ImportedMapFile] = []
         self.map_result = None
+        self.audi_edge_result = None
+        self.audi_edge_path = None
         self.map_linearity_legend = None
         self.map_spread_legend = None
         self.map_amplify_legend = None
@@ -29,6 +34,7 @@ class DynamicPagesController(_BaseController):
         super().__init__(*args, **kwargs)
         self._build_map_page()
         self._build_audi_program_page()
+        self._build_audi_edge_page()
         self._v090_language()
 
     def _build_audi_program_page(self):
@@ -71,6 +77,8 @@ class DynamicPagesController(_BaseController):
         if self.map_result is not None:
             evidence = "; ".join(self.map_result.files["File"].astype(str))
             records.extend(({"section": section, "evidence": evidence}) for section in ("20", "21"))
+        if self.audi_edge_result is not None and self.audi_edge_path is not None:
+            records.append({"section": "16", "evidence": str(self.audi_edge_path)})
         report = compile_audi_test_report(AudiSpecimen(regulated=bool(self.audi_program_type.currentData())), records)
         self.audi_program_report = report
         table = self.audi_program_table
@@ -100,6 +108,86 @@ class DynamicPagesController(_BaseController):
         elif section in {"20", "21"}:
             self.window.tabs.setCurrentWidget(self.map_page)
             self.map_views.setCurrentIndex(0 if section == "20" else 1)
+        elif section == "16":
+            self.window.tabs.setCurrentWidget(self.audi_edge_page)
+
+    def _build_audi_edge_page(self):
+        self.audi_edge_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_edge_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_edge_open = QtWidgets.QPushButton()
+        self.audi_edge_open.clicked.connect(self.open_audi_edge_file)
+        controls.addWidget(self.audi_edge_open)
+        self.audi_edge_sign_label = QtWidgets.QLabel()
+        controls.addWidget(self.audi_edge_sign_label)
+        self.audi_edge_sign = QtWidgets.QComboBox()
+        self.audi_edge_sign.addItem("", -1)
+        self.audi_edge_sign.addItem("", 1)
+        controls.addWidget(self.audi_edge_sign)
+        self.audi_edge_export = QtWidgets.QPushButton()
+        self.audi_edge_export.clicked.connect(self.export_audi_edge)
+        controls.addWidget(self.audi_edge_export)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_edge_status = QtWidgets.QLabel()
+        self.audi_edge_status.setWordWrap(True)
+        root.addWidget(self.audi_edge_status)
+        self.audi_edge_table = self._new_table()
+        root.addWidget(self.audi_edge_table)
+        self.audi_edge_plot = self.pg.GraphicsLayoutWidget()
+        self.audi_edge_plot.setBackground("#ffffff")
+        root.addWidget(self.audi_edge_plot, 1)
+        self.window.tabs.addTab(self.audi_edge_page, "")
+
+    def open_audi_edge_file(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.window, self._text("选择第16章五循环原始数据", "Select section 16 five-cycle data"),
+            "", "Test data (*.dat *.csv *.xlsx *.xlsm)",
+        )
+        if not path:
+            return
+        try:
+            dataset = load_dynamic_test_data(path)
+            result = analyze_edge_sensitivity(
+                dataset.data, compression_displacement_sign=int(self.audi_edge_sign.currentData())
+            )
+        except (ValueError, OSError) as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("数据不符合第16章", "Section 16 data rejected"), str(exc))
+            return
+        self.audi_edge_result = result
+        self.audi_edge_path = Path(path)
+        self.audi_edge_status.setText(self._text(
+            f"已计算 {result.source_rows} 点，采样率 {result.sample_rate_hz:.0f} Hz；试验温度、软电流、预处理、滤波器和项目限值仍须核实。",
+            f"Calculated {result.source_rows} samples at {result.sample_rate_hz:.0f} Hz. Verify temperature, soft current, preconditioning, filter and project limit.",
+        ))
+        table = self.audi_edge_table
+        table.setRowCount(len(result.comparison))
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(("Branch", "First cycle N", "Following four mean N", "First minus following N"))
+        for i, row in result.comparison.iterrows():
+            for j, value in enumerate((row["Branch"], row["First cycle N"], row["Following four mean N"], row["First minus following N"])):
+                table.setItem(i, j, QtWidgets.QTableWidgetItem(str(value) if j == 0 else f"{value:.2f}"))
+        self.audi_edge_plot.clear()
+        plot = self.audi_edge_plot.addPlot(title=self._text("第16章：全部五循环 F-v", "Section 16: all five F-v cycles"))
+        plot.setLabel("bottom", self._text("压缩正向速度", "Compression-positive velocity"), units="m/s")
+        plot.setLabel("left", self._text("测量力", "Measured force"), units="N")
+        data = dataset.data
+        t = data[TIME].to_numpy(float)
+        v = data[VELOCITY].to_numpy(float) if VELOCITY in data else np.gradient(data[DISP].to_numpy(float), t) / 1000.0
+        for cycle in range(5):
+            mask = (t >= t[0] + cycle / 16.68) & (t < t[0] + (cycle + 1) / 16.68)
+            if mask.any():
+                plot.plot(v[mask] * int(self.audi_edge_sign.currentData()), data[LOAD].to_numpy(float)[mask], pen=self.pg.mkPen("#c62828" if cycle == 0 else "#1565c0", width=1.5))
+        self.refresh_audi_program()
+
+    def export_audi_edge(self):
+        if self.audi_edge_result is None:
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self.window, self._text("导出第16章结果", "Export section 16 result"), "AUDI_section_16.xlsx", "Excel (*.xlsx)")
+        if path:
+            with ExcelWriter(Path(path).with_suffix(".xlsx")) as writer:
+                self.audi_edge_result.comparison.to_excel(writer, sheet_name="Comparison", index=False)
+                self.audi_edge_result.cycles.to_excel(writer, sheet_name="Five cycles", index=False)
 
     def export_audi_program(self):
         path, _ = QtWidgets.QFileDialog.getSaveFileName(
@@ -196,6 +284,15 @@ class DynamicPagesController(_BaseController):
                 "Audi VR-EF-33-2 v2.5 order, excluding durability sections 5, 7 and 9–12 for this project. Confirm conditional tests against the design and project requirements; no pass/fail without project limits.",
             ))
             self.refresh_audi_program()
+        if hasattr(self, "audi_edge_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_edge_page), self._text("16 边缘敏感性", "16 Edge sensitivity"))
+            self.audi_edge_open.setText(self._text("选择五循环数据…", "Select five-cycle data…"))
+            self.audi_edge_sign_label.setText(self._text("压缩方向位移", "Compression displacement"))
+            self.audi_edge_sign.setItemText(0, self._text("减小", "Decreases"))
+            self.audi_edge_sign.setItemText(1, self._text("增大", "Increases"))
+            self.audi_edge_export.setText(self._text("导出结果…", "Export result…"))
+            if self.audi_edge_result is None:
+                self.audi_edge_status.setText(self._text("导入从伸张端静止起步、首次运动为压缩的 5 个完整循环；规范条件由试验记录核实。", "Import five complete cycles starting at rest from extension, moving first in compression. Verify test conditions in the test record."))
         self.map_folder_button.setText(self._text("选择全电流数据文件夹…", "Select full-current data folder…"))
         self.map_remove_button.setText(self._text("移除所选数据", "Remove selected data"))
         self.map_soft_label.setText(self._text("软电流", "Soft current"))
@@ -535,3 +632,4 @@ class DynamicPagesController(_BaseController):
         if path:
             output = export_map_analysis_xlsx(self.map_result, path)
             self.map_status.setText(self._text(f"已导出：{output}", f"Exported: {output}"))
+

@@ -46,7 +46,7 @@ AUDI_TESTS: tuple[AudiTest, ...] = (
     AudiTest("13.3", "近用户工况低温密封", scope="monotube_or_project"),
     AudiTest("14", "发泡试验"),
     AudiTest("15", "阻尼力迟滞与不连续性"),
-    AudiTest("16", "边缘敏感性", scope="regulated"),
+    AudiTest("16", "边缘敏感性", scope="regulated", analyzer="edge_sensitivity"),
     AudiTest("17", "频率响应"),
     AudiTest("18", "切换时间", scope="regulated", analyzer="response"),
     AudiTest("19", "切换迟滞", scope="regulated", analyzer="switch_hysteresis"),
@@ -133,3 +133,4 @@ def compile_audi_test_report(
             "Notes": str(record.get("notes", "")),
         })
     return pd.DataFrame(rows)
+
