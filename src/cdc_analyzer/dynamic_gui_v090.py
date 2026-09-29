@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+from pandas import ExcelWriter
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .audi_items_20_21 import (
@@ -13,6 +14,12 @@ from .audi_items_20_21 import (
     export_map_analysis_xlsx,
     inspect_map_file,
 )
+from .audi_test_program import AudiSpecimen, compile_audi_test_report
+from .audi_edge_sensitivity import analyze_edge_sensitivity
+from .audi_frequency_response import FREQUENCIES_HZ, SPEEDS_M_S, analyze_frequency_step, compile_frequency_response
+from .audi_signal_io import load_audi_signals
+from .audi_ep_56300 import HIGH_SPEED_STAGES, analyze_foaming_run, analyze_high_speed_stage, foaming_delay_extends_beyond_center
+from .dynamic_analysis import DISP, LOAD, TIME, VELOCITY
 from .dynamic_gui_v085 import DynamicPagesController as _BaseController
 
 
@@ -20,6 +27,14 @@ class DynamicPagesController(_BaseController):
     def __init__(self, *args, **kwargs):
         self.map_files: list[ImportedMapFile] = []
         self.map_result = None
+        self.audi_edge_result = None
+        self.audi_edge_path = None
+        self.audi_frequency_steps = {}
+        self.audi_frequency_sources = {}
+        self.audi_high_speed_results = {}
+        self.audi_high_speed_sources = {}
+        self.audi_foaming_result = None
+        self.audi_foaming_path = None
         self.map_linearity_legend = None
         self.map_spread_legend = None
         self.map_amplify_legend = None
@@ -27,7 +42,475 @@ class DynamicPagesController(_BaseController):
         self.map_fi_legend = None
         super().__init__(*args, **kwargs)
         self._build_map_page()
+        self._build_audi_program_page()
+        self._build_audi_edge_page()
+        self._build_audi_frequency_page()
+        self._build_audi_high_speed_page()
+        self._build_audi_foaming_page()
         self._v090_language()
+
+    def _build_audi_program_page(self):
+        self.audi_program_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_program_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_program_type_label = QtWidgets.QLabel()
+        self.audi_program_type = QtWidgets.QComboBox()
+        self.audi_program_type.addItem("", True)
+        self.audi_program_type.addItem("", False)
+        self.audi_program_type.currentIndexChanged.connect(self.refresh_audi_program)
+        self.audi_program_refresh = QtWidgets.QPushButton()
+        self.audi_program_refresh.clicked.connect(self.refresh_audi_program)
+        self.audi_program_export = QtWidgets.QPushButton()
+        self.audi_program_export.clicked.connect(self.export_audi_program)
+        controls.addWidget(self.audi_program_type_label)
+        controls.addWidget(self.audi_program_type)
+        controls.addWidget(self.audi_program_refresh)
+        controls.addWidget(self.audi_program_export)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_program_note = QtWidgets.QLabel()
+        self.audi_program_note.setWordWrap(True)
+        root.addWidget(self.audi_program_note)
+        self.audi_program_table = self._new_table()
+        self.audi_program_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.audi_program_table.cellDoubleClicked.connect(self._open_audi_section)
+        root.addWidget(self.audi_program_table, 1)
+        self.window.tabs.addTab(self.audi_program_page, "")
+        self.refresh_audi_program()
+
+    def refresh_audi_program(self):
+        if not hasattr(self, "audi_program_table"):
+            return
+        records = []
+        if self.response_result is not None and self.response_result.settings.get("OEM Profile") == "audi":
+            records.append({"section": "18", "evidence": str(self.response_result.source_path)})
+        if self.hysteresis_result is not None and self.hysteresis_result.settings.get("OEM Profile") == "audi":
+            records.append({"section": "19", "evidence": str(self.hysteresis_result.source_path)})
+        if self.map_result is not None:
+            evidence = "; ".join(self.map_result.files["File"].astype(str))
+            records.extend(({"section": section, "evidence": evidence}) for section in ("20", "21"))
+        if self.audi_edge_result is not None and self.audi_edge_path is not None:
+            records.append({"section": "16", "evidence": str(self.audi_edge_path)})
+        if self.audi_frequency_steps:
+            records.append({"section": "17", "evidence": f"{len(self.audi_frequency_steps)} frequency blocks loaded"})
+        if self.audi_high_speed_results:
+            records.append({"section": "6", "evidence": f"{len(self.audi_high_speed_results)}/6 speed stages loaded"})
+        if self.audi_foaming_result is not None and self.audi_foaming_path is not None:
+            records.append({"section": "14", "evidence": str(self.audi_foaming_path)})
+        report = compile_audi_test_report(AudiSpecimen(regulated=bool(self.audi_program_type.currentData())), records)
+        self.audi_program_report = report
+        table = self.audi_program_table
+        table.setRowCount(len(report))
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels((
+            self._text("章节", "Section"), self._text("规范试验", "Standard test"),
+            self._text("适用", "Applies"), self._text("分析/证据", "Analysis / evidence"),
+        ))
+        for row_index, row in enumerate(report.itertuples(index=False)):
+            applies = row.Applicable
+            scope = self._text("待核实", "Verify") if applies is None else self._text("是", "Yes") if applies else self._text("否", "No")
+            analysis = row.Evidence or (self._text("已有相关分析入口", "Related analyzer available") if row.Analyzer != "manual evidence" else self._text("待接入数据或人工证据", "Data or manual evidence needed"))
+            for column, value in enumerate((row.Section, row.Test, scope, analysis)):
+                table.setItem(row_index, column, QtWidgets.QTableWidgetItem(str(value)))
+        table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Stretch)
+
+    def _open_audi_section(self, row: int, _column: int):
+        section = self.audi_program_report.iloc[row]["Section"]
+        if section == "4":
+            self.window.tabs.setCurrentWidget(self.window.plot_page)
+        elif section == "18":
+            self.window.tabs.setCurrentWidget(self.response_page)
+        elif section == "19":
+            self.window.tabs.setCurrentWidget(self.hysteresis_page)
+        elif section in {"20", "21"}:
+            self.window.tabs.setCurrentWidget(self.map_page)
+            self.map_views.setCurrentIndex(0 if section == "20" else 1)
+        elif section == "16":
+            self.window.tabs.setCurrentWidget(self.audi_edge_page)
+        elif section == "17":
+            self.window.tabs.setCurrentWidget(self.audi_frequency_page)
+        elif section == "6":
+            self.window.tabs.setCurrentWidget(self.audi_high_speed_page)
+        elif section == "14":
+            self.window.tabs.setCurrentWidget(self.audi_foaming_page)
+
+    def _build_audi_high_speed_page(self):
+        self.audi_high_speed_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_high_speed_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_high_speed_rpm = QtWidgets.QComboBox()
+        for rpm, speed in HIGH_SPEED_STAGES:
+            self.audi_high_speed_rpm.addItem(f"{rpm} rpm / {speed:g} m/s", rpm)
+        self.audi_high_speed_sign = QtWidgets.QComboBox()
+        self.audi_high_speed_sign.addItem("+", 1)
+        self.audi_high_speed_sign.addItem("−", -1)
+        self.audi_high_speed_zero = QtWidgets.QDoubleSpinBox()
+        self.audi_high_speed_zero.setRange(-100000, 100000)
+        self.audi_high_speed_zero.setDecimals(2)
+        self.audi_high_speed_zero.setSuffix(" N")
+        self.audi_high_speed_sign_label = QtWidgets.QLabel()
+        self.audi_high_speed_zero_label = QtWidgets.QLabel()
+        self.audi_high_speed_open = QtWidgets.QPushButton()
+        self.audi_high_speed_open.clicked.connect(self.open_audi_high_speed_file)
+        self.audi_high_speed_export = QtWidgets.QPushButton()
+        self.audi_high_speed_export.clicked.connect(self.export_audi_high_speed)
+        self.audi_high_speed_sign.currentIndexChanged.connect(self._clear_audi_high_speed)
+        self.audi_high_speed_zero.valueChanged.connect(self._clear_audi_high_speed)
+        for widget in (self.audi_high_speed_rpm, self.audi_high_speed_sign_label, self.audi_high_speed_sign,
+                       self.audi_high_speed_zero_label, self.audi_high_speed_zero, self.audi_high_speed_open, self.audi_high_speed_export):
+            controls.addWidget(widget)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_high_speed_status = QtWidgets.QLabel()
+        self.audi_high_speed_status.setWordWrap(True)
+        root.addWidget(self.audi_high_speed_status)
+        self.audi_high_speed_table = self._new_table()
+        self.audi_high_speed_table.cellClicked.connect(lambda row, _col: self._plot_audi_high_speed(int(self.audi_high_speed_table.item(row, 0).text())))
+        root.addWidget(self.audi_high_speed_table)
+        self.audi_high_speed_plot = self.pg.GraphicsLayoutWidget()
+        self.audi_high_speed_plot.setBackground("#ffffff")
+        root.addWidget(self.audi_high_speed_plot, 1)
+        self.window.tabs.addTab(self.audi_high_speed_page, "")
+        self._refresh_audi_high_speed_table()
+
+    def _clear_audi_high_speed(self):
+        self.audi_high_speed_results.clear()
+        self.audi_high_speed_sources.clear()
+        self.audi_high_speed_plot.clear()
+        self._refresh_audi_high_speed_table()
+        self.refresh_audi_program()
+
+    def _refresh_audi_high_speed_table(self):
+        table = self.audi_high_speed_table
+        table.setRowCount(len(HIGH_SPEED_STAGES))
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(("rpm", "Nominal m/s", "Measured m/s", "Tension N", "Compression N"))
+        for row, (rpm, nominal) in enumerate(HIGH_SPEED_STAGES):
+            result = self.audi_high_speed_results.get(rpm)
+            values = (str(rpm), f"{nominal:g}", f"{result.measured_peak_speed_m_s:.3f}" if result else "—",
+                      f"{result.tensile_max_n:.1f}" if result else "—", f"{result.compressive_max_n:.1f}" if result else "—")
+            for column, value in enumerate(values):
+                table.setItem(row, column, QtWidgets.QTableWidgetItem(value))
+        self.audi_high_speed_status.setText(self._text(
+            f"已导入 {len(self.audi_high_speed_results)}/6 档。每个文件须含该转速的三个循环，读取第三循环；拉伸力符号和 TL 295 力零点由试验记录设定。",
+            f"Loaded {len(self.audi_high_speed_results)}/6 stages. Each file needs three cycles at its selected rpm; the third is measured. Set tensile sign and TL 295 force zero from the test record.",
+        ))
+
+    def open_audi_high_speed_file(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self.window, self._text("选择第6章三循环速度段", "Select section 6 three-cycle stage"), "", "Test data (*.dat *.csv *.xlsx *.xlsm)")
+        if not path:
+            return
+        rpm = int(self.audi_high_speed_rpm.currentData())
+        try:
+            result = analyze_high_speed_stage(load_audi_signals(path), rpm=rpm,
+                                              tensile_force_sign=int(self.audi_high_speed_sign.currentData()),
+                                              force_zero_n=self.audi_high_speed_zero.value())
+        except (ValueError, OSError) as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("第6章数据不符合要求", "Section 6 data rejected"), str(exc))
+            return
+        self.audi_high_speed_results[rpm] = result
+        self.audi_high_speed_sources[rpm] = str(Path(path))
+        self._refresh_audi_high_speed_table()
+        self._plot_audi_high_speed(rpm)
+        self.refresh_audi_program()
+
+    def _plot_audi_high_speed(self, rpm: int):
+        self.audi_high_speed_plot.clear()
+        result = self.audi_high_speed_results.get(rpm)
+        if result is None:
+            return
+        plot = self.audi_high_speed_plot.addPlot(title=f"{rpm} rpm — cycle 3")
+        plot.setLabel("bottom", "Displacement", units="mm")
+        plot.setLabel("left", "Force", units="N")
+        plot.plot(result.measurement_cycle[DISP].to_numpy(float), result.measurement_cycle[LOAD].to_numpy(float),
+                  pen=self.pg.mkPen("#1565c0", width=2))
+
+    def export_audi_high_speed(self):
+        if len(self.audi_high_speed_results) != len(HIGH_SPEED_STAGES):
+            QtWidgets.QMessageBox.warning(self.window, self._text("速度段不完整", "Incomplete speed stages"), self._text("需要全部六档速度。", "All six speed stages are required."))
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self.window, self._text("导出第6章结果", "Export section 6 results"), "AUDI_section_6.xlsx", "Excel (*.xlsx)")
+        if path:
+            from pandas import DataFrame
+            DataFrame([{"rpm": rpm, "Nominal m/s": nominal, "Measured m/s": self.audi_high_speed_results[rpm].measured_peak_speed_m_s,
+                        "Tension N": self.audi_high_speed_results[rpm].tensile_max_n,
+                        "Compression N": self.audi_high_speed_results[rpm].compressive_max_n,
+                        "Source file": self.audi_high_speed_sources[rpm], "Force zero N": self.audi_high_speed_zero.value()}
+                       for rpm, nominal in HIGH_SPEED_STAGES]).to_excel(Path(path).with_suffix(".xlsx"), index=False)
+
+    def _build_audi_foaming_page(self):
+        self.audi_foaming_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_foaming_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_foaming_sign = QtWidgets.QComboBox()
+        self.audi_foaming_sign.addItem("+", 1)
+        self.audi_foaming_sign.addItem("−", -1)
+        self.audi_foaming_open = QtWidgets.QPushButton()
+        self.audi_foaming_open.clicked.connect(self.open_audi_foaming_file)
+        self.audi_foaming_end = QtWidgets.QDoubleSpinBox()
+        self.audi_foaming_end.setRange(-10000, 10000)
+        self.audi_foaming_end.setDecimals(2)
+        self.audi_foaming_end.setSuffix(" mm")
+        self.audi_foaming_end.setSpecialValueText(self._text("未标记", "Not marked"))
+        self.audi_foaming_end.setValue(-10000)
+        self.audi_foaming_sign_label = QtWidgets.QLabel()
+        self.audi_foaming_end_label = QtWidgets.QLabel()
+        self.audi_foaming_check = QtWidgets.QPushButton()
+        self.audi_foaming_check.clicked.connect(self.check_audi_foaming_extent)
+        self.audi_foaming_sign.currentIndexChanged.connect(self._clear_audi_foaming)
+        for widget in (self.audi_foaming_sign_label, self.audi_foaming_sign, self.audi_foaming_open,
+                       self.audi_foaming_end_label, self.audi_foaming_end, self.audi_foaming_check):
+            controls.addWidget(widget)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_foaming_status = QtWidgets.QLabel()
+        self.audi_foaming_status.setWordWrap(True)
+        root.addWidget(self.audi_foaming_status)
+        self.audi_foaming_plot = self.pg.GraphicsLayoutWidget()
+        self.audi_foaming_plot.setBackground("#ffffff")
+        root.addWidget(self.audi_foaming_plot, 1)
+        self.window.tabs.addTab(self.audi_foaming_page, "")
+
+    def _clear_audi_foaming(self):
+        self.audi_foaming_result = None
+        self.audi_foaming_path = None
+        self.audi_foaming_plot.clear()
+        self.audi_foaming_end.setValue(self.audi_foaming_end.minimum())
+        self.refresh_audi_program()
+
+    def open_audi_foaming_file(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self.window, self._text("选择第14章原始数据", "Select section 14 raw data"), "", "Test data (*.dat *.csv *.xlsx *.xlsm)")
+        if not path:
+            return
+        try:
+            result = analyze_foaming_run(load_audi_signals(path), compression_displacement_sign=int(self.audi_foaming_sign.currentData()))
+        except (ValueError, OSError) as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("第14章数据不符合要求", "Section 14 data rejected"), str(exc))
+            return
+        self.audi_foaming_result = result
+        self.audi_foaming_path = Path(path)
+        self.audi_foaming_end.setValue(self.audi_foaming_end.minimum())
+        self.audi_foaming_plot.clear()
+        plot = self.audi_foaming_plot.addPlot(title=self._text("发泡试验：各循环力—位移", "Foaming: force-displacement cycles"))
+        plot.setLabel("bottom", "Displacement", units="mm")
+        plot.setLabel("left", "Force", units="N")
+        for cycle in result.cycles:
+            plot.plot(cycle[DISP].to_numpy(float), cycle[LOAD].to_numpy(float), pen=self.pg.mkPen("#1565c0", width=1))
+        plot.addItem(self.pg.InfiniteLine(pos=result.center_mm, angle=90, pen=self.pg.mkPen("#c62828", style=QtCore.Qt.PenStyle.DashLine)))
+        self.audi_foaming_status.setText(self._text(
+            f"{len(result.cycles)} 个完整循环，行程 {result.stroke_mm:.1f} mm，频率 {result.frequency_hz:.2f} Hz。请从曲线判断是否存在延迟建立力，并标记延迟结束位移；未标记时不作结论。",
+            f"{len(result.cycles)} complete cycles, {result.stroke_mm:.1f} mm, {result.frequency_hz:.2f} Hz. Review the force buildup and mark its delay endpoint; no conclusion before marking.",
+        ))
+        self.refresh_audi_program()
+
+    def check_audi_foaming_extent(self):
+        if self.audi_foaming_result is None:
+            return
+        if self.audi_foaming_end.value() == self.audi_foaming_end.minimum():
+            self.audi_foaming_status.setText(self._text("请先在曲线上确定延迟结束位置，再填写位移值。", "Locate the delay endpoint on the curve and enter its displacement first."))
+            return
+        beyond = foaming_delay_extends_beyond_center(self.audi_foaming_result, self.audi_foaming_end.value())
+        self.audi_foaming_status.setText(self._text(
+            "标记的延迟结束位移超过行程中位；按 EP 56300.13 不允许。" if beyond else "标记的延迟结束位移未超过行程中位；仍需人工检查全部曲线的不连续性。",
+            "Marked delay extends beyond mid-stroke; EP 56300.13 disallows this." if beyond else "Marked delay does not extend beyond mid-stroke; review all force-loop discontinuities manually.",
+        ))
+
+    def _build_audi_frequency_page(self):
+        self.audi_frequency_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_frequency_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_frequency_current = QtWidgets.QComboBox()
+        for current in ("soft", "medium", "passive"):
+            self.audi_frequency_current.addItem(current, current)
+        self.audi_frequency_speed = QtWidgets.QComboBox()
+        for speed in SPEEDS_M_S:
+            self.audi_frequency_speed.addItem(f"{speed:g} m/s", speed)
+        self.audi_frequency_hz = QtWidgets.QComboBox()
+        for frequency in FREQUENCIES_HZ:
+            self.audi_frequency_hz.addItem(f"{frequency} Hz", frequency)
+        self.audi_frequency_open = QtWidgets.QPushButton()
+        self.audi_frequency_open.clicked.connect(self.open_audi_frequency_file)
+        self.audi_frequency_export = QtWidgets.QPushButton()
+        self.audi_frequency_export.clicked.connect(self.export_audi_frequency)
+        for widget in (self.audi_frequency_current, self.audi_frequency_speed, self.audi_frequency_hz, self.audi_frequency_open, self.audi_frequency_export):
+            controls.addWidget(widget)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_frequency_status = QtWidgets.QLabel()
+        self.audi_frequency_status.setWordWrap(True)
+        root.addWidget(self.audi_frequency_status)
+        self.audi_frequency_table = self._new_table()
+        root.addWidget(self.audi_frequency_table, 1)
+        self.audi_frequency_plot = self.pg.GraphicsLayoutWidget()
+        self.audi_frequency_plot.setBackground("#ffffff")
+        root.addWidget(self.audi_frequency_plot, 1)
+        self.audi_frequency_current.currentIndexChanged.connect(self._refresh_audi_frequency_plot)
+        self.audi_frequency_speed.currentIndexChanged.connect(self._refresh_audi_frequency_plot)
+        self.window.tabs.addTab(self.audi_frequency_page, "")
+        self._refresh_audi_frequency_table()
+
+    def _refresh_audi_frequency_table(self):
+        table = self.audi_frequency_table
+        table.setRowCount(len(self.audi_frequency_steps))
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(("Current", "Speed m/s", "Hz", "Loss angle °", "Dynamic N/mm", "Elastic N/mm", "Damping Ns/mm"))
+        for row, (key, result) in enumerate(sorted(self.audi_frequency_steps.items(), key=lambda item: (item[0][0], item[0][1], -item[0][2]))):
+            values = (key[0], f"{key[1]:g}", str(key[2]), f"{result.loss_angle_deg:.3f}",
+                      f"{result.dynamic_stiffness_n_mm:.3f}", f"{result.elastic_stiffness_n_mm:.3f}", f"{result.damping_constant_ns_mm:.4f}")
+            for column, value in enumerate(values):
+                table.setItem(row, column, QtWidgets.QTableWidgetItem(value))
+        required = 150 if bool(self.audi_program_type.currentData()) else 75
+        self.audi_frequency_status.setText(self._text(
+            f"已加载 {len(self.audi_frequency_steps)}/{required} 个十循环频率段；每段需要 4 kHz 原始位移与力。导出时检查完整性；预处理、温度、电流和项目限值需凭试验记录核实。",
+            f"Loaded {len(self.audi_frequency_steps)}/{required} ten-cycle blocks at 4 kHz. Export checks completeness; verify preconditioning, temperature, current and project limits from the test record.",
+        ))
+        self._refresh_audi_frequency_plot()
+
+    def _refresh_audi_frequency_plot(self):
+        if not hasattr(self, "audi_frequency_plot"):
+            return
+        self.audi_frequency_plot.clear()
+        current = str(self.audi_frequency_current.currentData())
+        speed = float(self.audi_frequency_speed.currentData())
+        selected = sorted(((frequency, result) for (state, target, frequency), result in self.audi_frequency_steps.items()
+                           if state == current and target == speed), reverse=True)
+        axes = (
+            ("Loss angle", "deg", "loss_angle_deg"),
+            ("Dynamic stiffness", "N/mm", "dynamic_stiffness_n_mm"),
+            ("Elastic stiffness", "N/mm", "elastic_stiffness_n_mm"),
+            ("Damping constant", "Ns/mm", "damping_constant_ns_mm"),
+        )
+        for index, (title, unit, field) in enumerate(axes):
+            plot = self.audi_frequency_plot.addPlot(row=index // 2, col=index % 2, title=title)
+            plot.setLabel("bottom", "Frequency", units="Hz")
+            plot.setLabel("left", title, units=unit)
+            if selected:
+                plot.plot([frequency for frequency, _ in selected], [getattr(result, field) for _, result in selected],
+                          pen=self.pg.mkPen("#1565c0", width=2), symbol="o", symbolBrush="#1565c0")
+
+    def open_audi_frequency_file(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.window, self._text("选择第17章十循环频率段", "Select section 17 ten-cycle block"),
+            "", "Test data (*.dat *.csv *.xlsx *.xlsm)",
+        )
+        if not path:
+            return
+        key = (str(self.audi_frequency_current.currentData()), float(self.audi_frequency_speed.currentData()), int(self.audi_frequency_hz.currentData()))
+        try:
+            frame = load_audi_signals(path)
+            result = analyze_frequency_step(frame, frequency_hz=key[2], target_speed_m_s=key[1])
+        except (ValueError, OSError) as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("第17章数据不符合要求", "Section 17 data rejected"), str(exc))
+            return
+        self.audi_frequency_steps[key] = result
+        self.audi_frequency_sources[key] = str(Path(path))
+        self._refresh_audi_frequency_table()
+        self.refresh_audi_program()
+
+    def export_audi_frequency(self):
+        try:
+            report = compile_frequency_response(self.audi_frequency_steps, regulated=bool(self.audi_program_type.currentData()))
+        except ValueError as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("频率段不完整", "Incomplete frequency sweep"), str(exc))
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self.window, self._text("导出第17章频率响应", "Export section 17 frequency response"), "AUDI_section_17.xlsx", "Excel (*.xlsx)")
+        if path:
+            report["Source file"] = [
+                self.audi_frequency_sources[(str(row["Current"]), float(row["Target speed m/s"]), int(row["Frequency Hz"]))]
+                for _, row in report.iterrows()
+            ]
+            report.to_excel(Path(path).with_suffix(".xlsx"), index=False)
+
+    def _build_audi_edge_page(self):
+        self.audi_edge_page = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(self.audi_edge_page)
+        controls = QtWidgets.QHBoxLayout()
+        self.audi_edge_open = QtWidgets.QPushButton()
+        self.audi_edge_open.clicked.connect(self.open_audi_edge_file)
+        controls.addWidget(self.audi_edge_open)
+        self.audi_edge_sign_label = QtWidgets.QLabel()
+        controls.addWidget(self.audi_edge_sign_label)
+        self.audi_edge_sign = QtWidgets.QComboBox()
+        self.audi_edge_sign.addItem("", -1)
+        self.audi_edge_sign.addItem("", 1)
+        controls.addWidget(self.audi_edge_sign)
+        self.audi_edge_export = QtWidgets.QPushButton()
+        self.audi_edge_export.clicked.connect(self.export_audi_edge)
+        controls.addWidget(self.audi_edge_export)
+        controls.addStretch(1)
+        root.addLayout(controls)
+        self.audi_edge_status = QtWidgets.QLabel()
+        self.audi_edge_status.setWordWrap(True)
+        root.addWidget(self.audi_edge_status)
+        self.audi_edge_table = self._new_table()
+        root.addWidget(self.audi_edge_table)
+        self.audi_edge_plot = self.pg.GraphicsLayoutWidget()
+        self.audi_edge_plot.setBackground("#ffffff")
+        root.addWidget(self.audi_edge_plot, 1)
+        self.window.tabs.addTab(self.audi_edge_page, "")
+
+    def open_audi_edge_file(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self.window, self._text("选择第16章五循环原始数据", "Select section 16 five-cycle data"),
+            "", "Test data (*.dat *.csv *.xlsx *.xlsm)",
+        )
+        if not path:
+            return
+        try:
+            frame = load_audi_signals(path)
+            result = analyze_edge_sensitivity(
+                frame, compression_displacement_sign=int(self.audi_edge_sign.currentData())
+            )
+        except (ValueError, OSError) as exc:
+            QtWidgets.QMessageBox.warning(self.window, self._text("数据不符合第16章", "Section 16 data rejected"), str(exc))
+            return
+        self.audi_edge_result = result
+        self.audi_edge_path = Path(path)
+        self.audi_edge_status.setText(self._text(
+            f"已计算 {result.source_rows} 点，采样率 {result.sample_rate_hz:.0f} Hz；试验温度、软电流、预处理、滤波器和项目限值仍须核实。",
+            f"Calculated {result.source_rows} samples at {result.sample_rate_hz:.0f} Hz. Verify temperature, soft current, preconditioning, filter and project limit.",
+        ))
+        table = self.audi_edge_table
+        table.setRowCount(len(result.comparison))
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(("Branch", "First cycle N", "Following four mean N", "First minus following N"))
+        for i, row in result.comparison.iterrows():
+            for j, value in enumerate((row["Branch"], row["First cycle N"], row["Following four mean N"], row["First minus following N"])):
+                table.setItem(i, j, QtWidgets.QTableWidgetItem(str(value) if j == 0 else f"{value:.2f}"))
+        self.audi_edge_plot.clear()
+        plot = self.audi_edge_plot.addPlot(title=self._text("第16章：全部五循环 F-v", "Section 16: all five F-v cycles"))
+        plot.setLabel("bottom", self._text("压缩正向速度", "Compression-positive velocity"), units="m/s")
+        plot.setLabel("left", self._text("测量力", "Measured force"), units="N")
+        data = frame
+        t = data[TIME].to_numpy(float)
+        v = data[VELOCITY].to_numpy(float) if VELOCITY in data else np.gradient(data[DISP].to_numpy(float), t) / 1000.0
+        for cycle in range(5):
+            mask = (t >= t[0] + cycle / 16.68) & (t < t[0] + (cycle + 1) / 16.68)
+            if mask.any():
+                plot.plot(v[mask] * int(self.audi_edge_sign.currentData()), data[LOAD].to_numpy(float)[mask], pen=self.pg.mkPen("#c62828" if cycle == 0 else "#1565c0", width=1.5))
+        self.refresh_audi_program()
+
+    def export_audi_edge(self):
+        if self.audi_edge_result is None:
+            return
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(self.window, self._text("导出第16章结果", "Export section 16 result"), "AUDI_section_16.xlsx", "Excel (*.xlsx)")
+        if path:
+            with ExcelWriter(Path(path).with_suffix(".xlsx")) as writer:
+                self.audi_edge_result.comparison.to_excel(writer, sheet_name="Comparison", index=False)
+                self.audi_edge_result.cycles.to_excel(writer, sheet_name="Five cycles", index=False)
+
+    def export_audi_program(self):
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self.window, self._text("导出 AUDI 试验清单", "Export Audi test program"),
+            "AUDI_VR-EF-33-2_v2.5_test_program.xlsx", "Excel (*.xlsx)",
+        )
+        if not path:
+            return
+        self.refresh_audi_program()
+        report = self.audi_program_report.copy()
+        report.insert(0, "Standard", "AUDI VR-EF-33-2 v2.5 (2020-07-30)")
+        report.to_excel(Path(path).with_suffix(".xlsx"), index=False)
 
     def _build_map_page(self):
         self.map_page = QtWidgets.QWidget()
@@ -100,6 +583,48 @@ class DynamicPagesController(_BaseController):
     def _v090_language(self):
         if not hasattr(self, "map_page"):
             return
+        if hasattr(self, "audi_program_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_program_page), self._text("AUDI 试验顺序", "Audi test program"))
+            self.audi_program_type_label.setText(self._text("减振器类型", "Damper type"))
+            self.audi_program_type.setItemText(0, self._text("可调", "Regulated"))
+            self.audi_program_type.setItemText(1, self._text("常规", "Conventional"))
+            self.audi_program_refresh.setText(self._text("刷新分析状态", "Refresh analysis"))
+            self.audi_program_export.setText(self._text("导出规范顺序清单", "Export ordered program"))
+            self.audi_program_note.setText(self._text(
+                "依据 AUDI VR-EF-33-2 v2.5 第1章适用范围和第4–22章顺序；按本项目范围排除第5、7、9–12章耐久类试验。条件项目需结合结构和项目要求核实；未录入项目限值时不判定合格。",
+                "Audi VR-EF-33-2 v2.5 order, excluding durability sections 5, 7 and 9–12 for this project. Confirm conditional tests against the design and project requirements; no pass/fail without project limits.",
+            ))
+            self.refresh_audi_program()
+        if hasattr(self, "audi_edge_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_edge_page), self._text("16 边缘敏感性", "16 Edge sensitivity"))
+            self.audi_edge_open.setText(self._text("选择五循环数据…", "Select five-cycle data…"))
+            self.audi_edge_sign_label.setText(self._text("压缩方向位移", "Compression displacement"))
+            self.audi_edge_sign.setItemText(0, self._text("减小", "Decreases"))
+            self.audi_edge_sign.setItemText(1, self._text("增大", "Increases"))
+            self.audi_edge_export.setText(self._text("导出结果…", "Export result…"))
+            if self.audi_edge_result is None:
+                self.audi_edge_status.setText(self._text("导入从伸张端静止起步、首次运动为压缩的 5 个完整循环；规范条件由试验记录核实。", "Import five complete cycles starting at rest from extension, moving first in compression. Verify test conditions in the test record."))
+        if hasattr(self, "audi_frequency_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_frequency_page), self._text("17 频率响应", "17 Frequency response"))
+            self.audi_frequency_open.setText(self._text("加入十循环数据…", "Add ten-cycle block…"))
+            self.audi_frequency_export.setText(self._text("导出完整结果…", "Export complete result…"))
+            self._refresh_audi_frequency_table()
+        if hasattr(self, "audi_high_speed_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_high_speed_page), self._text("6 高活塞速度", "6 High piston speed"))
+            self.audi_high_speed_sign_label.setText(self._text("拉伸力符号", "Tensile force sign"))
+            self.audi_high_speed_zero_label.setText(self._text("力零点", "Force zero"))
+            self.audi_high_speed_open.setText(self._text("加入三循环数据…", "Add three-cycle stage…"))
+            self.audi_high_speed_export.setText(self._text("导出六档结果…", "Export six stages…"))
+            self._refresh_audi_high_speed_table()
+        if hasattr(self, "audi_foaming_page"):
+            self.window.tabs.setTabText(self.window.tabs.indexOf(self.audi_foaming_page), self._text("14 发泡试验", "14 Foaming test"))
+            self.audi_foaming_sign_label.setText(self._text("压缩位移方向", "Compression displacement"))
+            self.audi_foaming_end_label.setText(self._text("延迟结束位移", "Delay endpoint"))
+            self.audi_foaming_end.setSpecialValueText(self._text("未标记", "Not marked"))
+            self.audi_foaming_open.setText(self._text("选择原始数据…", "Select raw data…"))
+            self.audi_foaming_check.setText(self._text("检查中位边界", "Check mid-stroke boundary"))
+            if self.audi_foaming_result is None:
+                self.audi_foaming_status.setText(self._text("导入 600 rpm、50 mm 总行程的原始力与位移信号，查看各循环曲线。泡沫化不连续性需人工标记和判读。", "Import raw force and displacement at 600 rpm and 50 mm total stroke. Mark and review foaming discontinuities manually."))
         self.map_folder_button.setText(self._text("选择全电流数据文件夹…", "Select full-current data folder…"))
         self.map_remove_button.setText(self._text("移除所选数据", "Remove selected data"))
         self.map_soft_label.setText(self._text("软电流", "Soft current"))
@@ -262,7 +787,7 @@ class DynamicPagesController(_BaseController):
         self._map_plot_style(linearity, self._text("归一化阻尼力差", "Normalized damping-force difference"), None, self._text("电流", "Current"), "A")
         linearity.setTitle(self._text("第20项：电流—阻尼力线性", "Item 20: current–force linearity"), color="#202020", size="11pt")
         linearity.showGrid(x=True, y=True, alpha=0.15)
-        legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt")
+        legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt", labelTextColor="#263238", verSpacing=2)
         legend.setBrush(self.pg.mkBrush(255, 255, 255))
         self.map_linearity_plot.addItem(legend, row=0, col=1)
         self.map_linearity_legend = legend
@@ -270,7 +795,9 @@ class DynamicPagesController(_BaseController):
         self.map_linearity_plot.ci.layout.setColumnStretchFactor(1, 1)
         raw = self.map_result.current_force_linearity
         item20_speeds = sorted(raw["Speed m/s"].unique())
-        speed_colors = {speed: self.pg.intColor(index, hues=max(1, len(item20_speeds))) for index, speed in enumerate(item20_speeds)}
+        item20_colors = ("#b71c1c", "#0d47a1", "#2e7d32", "#6a1b9a", "#bf360c", "#006064", "#ad1457", "#4e342e")
+        speed_colors = {speed: item20_colors[index % len(item20_colors)] for index, speed in enumerate(item20_speeds)}
+        point_symbol = "o" if self.map_show_points.isChecked() else None
         for ((speed, direction), group) in raw.groupby(["Speed m/s", "Direction"], sort=True):
             group = group.sort_values("Current A")
             color = speed_colors[speed]
@@ -278,7 +805,7 @@ class DynamicPagesController(_BaseController):
             pen.setStyle(QtCore.Qt.PenStyle.SolidLine)
             curve = linearity.plot(
                 group["Current A"].to_numpy(float), group["Normalized Force"].to_numpy(float),
-                pen=pen, symbol="o", symbolSize=6,
+                pen=pen, symbol=point_symbol, symbolSize=6, symbolBrush=color, symbolPen=color,
             )
             if direction == "Rebound":
                 legend.addItem(curve, self._text(f"{speed:g} m/s", f"{speed:g} m/s"))
@@ -290,10 +817,14 @@ class DynamicPagesController(_BaseController):
         band_pen = self._dash_pen("#b0bec5", 1.2, (16, 12))
         linearity.addLine(y=1.0, pen=band_pen)
         linearity.addLine(y=-1.0, pen=band_pen)
-        ideal_pen = self._dash_pen("#1565c0", 1.8, (16, 12))
+        ideal_pen = self._dash_pen("#455a64", 1.8, (16, 12))
         ideal_curve = linearity.plot([soft_current, hard_current], [0.0, 1.0], pen=ideal_pen)
         legend.addItem(ideal_curve, self._text("45°理想线", "45° ideal line"))
         linearity.plot([soft_current, hard_current], [0.0, -1.0], pen=ideal_pen)
+        for _sample, label in legend.items:
+            legend.layout.setAlignment(label, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        legend.setFixedHeight(22 * len(legend.items) + 8)
+        self.map_linearity_plot.ci.layout.setAlignment(legend, QtCore.Qt.AlignmentFlag.AlignTop)
 
         spread_data = self.map_result.spread_amplification
         directions = [direction for direction in ("Rebound", "Compression") if direction in set(spread_data["Direction"])]
@@ -311,7 +842,7 @@ class DynamicPagesController(_BaseController):
         width = 0.55
         spread_legend = self.pg.LegendItem(offset=(0, 0), labelTextSize="9pt")
         spread_legend.setBrush(self.pg.mkBrush(255, 255, 255))
-        self.map_spread_plot.addItem(spread_legend, row=0, col=2)
+        self.map_spread_plot.addItem(spread_legend, row=0, col=1)
         self.map_spread_legend = spread_legend
         for index, direction in enumerate(directions):
             group = spread_data[spread_data["Direction"] == direction].sort_values("Speed m/s")
@@ -327,7 +858,7 @@ class DynamicPagesController(_BaseController):
                 spread.addItem(label)
         spread.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
 
-        amplify = self.map_spread_plot.addPlot(row=0, col=1)
+        amplify = self.map_spread_plot.addPlot(row=0, col=2)
         self._map_plot_style(amplify, self._text("放大倍数", "Amplification"), None, self._text("速度", "Speed"), "m/s")
         amplify.setTitle(self._text("第21项：放大倍数", "Item 21: amplification"), color="#202020", size="11pt")
         amplify.showGrid(x=True, y=True, alpha=0.15)
@@ -350,8 +881,8 @@ class DynamicPagesController(_BaseController):
                 amplify.addItem(label)
         amplify.addLine(y=0, pen=self.pg.mkPen("#888888", width=0.7))
         self.map_spread_plot.ci.layout.setColumnStretchFactor(0, 3)
-        self.map_spread_plot.ci.layout.setColumnStretchFactor(1, 3)
-        self.map_spread_plot.ci.layout.setColumnStretchFactor(2, 1)
+        self.map_spread_plot.ci.layout.setColumnStretchFactor(1, 1)
+        self.map_spread_plot.ci.layout.setColumnStretchFactor(2, 3)
         self.map_spread_plot.ci.layout.setColumnStretchFactor(3, 1)
 
         raw = self.map_result.current_force_linearity
@@ -433,3 +964,4 @@ class DynamicPagesController(_BaseController):
         if path:
             output = export_map_analysis_xlsx(self.map_result, path)
             self.map_status.setText(self._text(f"已导出：{output}", f"Exported: {output}"))
+

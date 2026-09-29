@@ -100,6 +100,15 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     pages._refresh_map_file_table()
     pages._fill_table(pages.map_force_velocity_table, result.force_velocity_table)
     pages.refresh_map_plots()
+    pages.refresh_audi_program()
+
+    report = pages.audi_program_report
+    assert report["Section"].tolist() == [
+        "4", "6", "8.1", "8.2", "8.3", "8.4", "8.5", "13.1", "13.2", "13.3",
+        "14", "15", "16", "17", "18", "19", "20", "21", "22.1", "22.2",
+    ]
+    assert report.loc[report["Section"] == "20", "Evidence"].item()
+    assert report.loc[report["Section"] == "20", "Verdict"].item() == "pending"
 
     assert pages.map_soft_current.value() == pytest.approx(0.3)
     assert pages.map_hard_current.value() == pytest.approx(1.6)
@@ -113,6 +122,8 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert all(curve.opts["pen"].isCosmetic() for curve in dashed)
     solid = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine]
     assert len(solid) == 4
+    assert all(curve.opts["symbol"] == "o" for curve in solid)
+    assert {curve.opts["pen"].color().name() for curve in solid} == {"#b71c1c", "#0d47a1"}
     tick_levels = linearity.getAxis("left")._tickLevels
     assert tick_levels is not None
     tick_strings = {s for level in tick_levels for _v, s in level}
@@ -120,12 +131,14 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     hundred_lines = [it for it in linearity.items if isinstance(it, pg.InfiniteLine) and abs(abs(it.getPos()[1]) - 1.0) < 1e-9]
     assert len(hundred_lines) == 2
     assert all(line.pen.isCosmetic() for line in hundred_lines)
-    assert pages.map_spread_plot.getItem(0, 0) is not None
-    assert pages.map_spread_plot.getItem(0, 1) is not None
-    bars = [item for item in pages.map_spread_plot.getItem(0, 0).items if isinstance(item, pg.BarGraphItem)]
+    spread_plot = pages.map_spread_plot.getItem(0, 0)
+    amplify_plot = pages.map_spread_plot.getItem(0, 2)
+    assert pages.map_spread_plot.getItem(0, 1) is pages.map_spread_legend
+    assert pages.map_spread_plot.getItem(0, 3) is pages.map_amplify_legend
+    bars = [item for item in spread_plot.items if isinstance(item, pg.BarGraphItem)]
     assert len(bars) == 2
     assert all(np.asarray(bar.opts["x"]) == pytest.approx([0.0, 1.0]) for bar in bars)
-    amp_curves = pages.map_spread_plot.getItem(0, 1).listDataItems()
+    amp_curves = amplify_plot.listDataItems()
     assert len(amp_curves) == 2
     fv_curves = pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
     fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
@@ -135,6 +148,9 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     assert all(curve.opts["symbol"] == "o" for curve in fv_curves + fi_curves)
     pages.map_show_points.setChecked(False)
     app.processEvents()
+    linearity = pages.map_linearity_plot.getItem(0, 0)
+    solid = [curve for curve in linearity.listDataItems() if curve.opts["pen"].style() == QtCore.Qt.PenStyle.SolidLine]
+    assert all(curve.opts["symbol"] is None for curve in solid)
     fv_curves = pages.map_force_velocity_plot.getItem(0, 0).listDataItems()
     fi_curves = pages.map_force_current_plot.getItem(0, 0).listDataItems()
     assert all(curve.opts["symbol"] is None for curve in fv_curves + fi_curves)
@@ -146,6 +162,19 @@ def test_v091_gui_standard_layout(monkeypatch, tmp_path):
     window.show()
     for _ in range(3):
         app.processEvents()
+    linearity = pages.map_linearity_plot.getItem(0, 0)
+    linearity_legend = pages.map_linearity_legend
+    assert linearity_legend.height() < linearity.height() * 0.7
+    assert linearity_legend.sceneBoundingRect().top() <= linearity.sceneBoundingRect().top() + 10
+    for sample, label in linearity_legend.items:
+        assert abs(sample.sceneBoundingRect().center().y() - label.sceneBoundingRect().center().y()) < 5
+    spread_rect = spread_plot.sceneBoundingRect()
+    spread_legend_rect = pages.map_spread_legend.sceneBoundingRect()
+    amplify_rect = amplify_plot.sceneBoundingRect()
+    amplify_legend_rect = pages.map_amplify_legend.sceneBoundingRect()
+    assert spread_rect.center().x() < spread_legend_rect.center().x()
+    assert spread_legend_rect.center().x() < amplify_rect.center().x()
+    assert amplify_rect.center().x() < amplify_legend_rect.center().x()
     legend_rect = pages.map_fv_legend.sceneBoundingRect()
     plot_rect = fv_plot.sceneBoundingRect()
     assert legend_rect.left() >= plot_rect.right() - 2
