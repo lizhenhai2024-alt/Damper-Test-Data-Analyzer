@@ -17,7 +17,8 @@ from .audi_items_20_21 import (
 from .audi_test_program import AudiSpecimen, compile_audi_test_report
 from .audi_edge_sensitivity import analyze_edge_sensitivity
 from .audi_frequency_response import FREQUENCIES_HZ, SPEEDS_M_S, analyze_frequency_step, compile_frequency_response
-from .dynamic_analysis import DISP, LOAD, TIME, VELOCITY, load_dynamic_test_data
+from .audi_signal_io import load_audi_signals
+from .dynamic_analysis import DISP, LOAD, TIME, VELOCITY
 from .dynamic_gui_v085 import DynamicPagesController as _BaseController
 
 
@@ -201,8 +202,8 @@ class DynamicPagesController(_BaseController):
             return
         key = (str(self.audi_frequency_current.currentData()), float(self.audi_frequency_speed.currentData()), int(self.audi_frequency_hz.currentData()))
         try:
-            dataset = load_dynamic_test_data(path)
-            result = analyze_frequency_step(dataset.data, frequency_hz=key[2], target_speed_m_s=key[1])
+            frame = load_audi_signals(path)
+            result = analyze_frequency_step(frame, frequency_hz=key[2], target_speed_m_s=key[1])
         except (ValueError, OSError) as exc:
             QtWidgets.QMessageBox.warning(self.window, self._text("第17章数据不符合要求", "Section 17 data rejected"), str(exc))
             return
@@ -261,9 +262,9 @@ class DynamicPagesController(_BaseController):
         if not path:
             return
         try:
-            dataset = load_dynamic_test_data(path)
+            frame = load_audi_signals(path)
             result = analyze_edge_sensitivity(
-                dataset.data, compression_displacement_sign=int(self.audi_edge_sign.currentData())
+                frame, compression_displacement_sign=int(self.audi_edge_sign.currentData())
             )
         except (ValueError, OSError) as exc:
             QtWidgets.QMessageBox.warning(self.window, self._text("数据不符合第16章", "Section 16 data rejected"), str(exc))
@@ -285,7 +286,7 @@ class DynamicPagesController(_BaseController):
         plot = self.audi_edge_plot.addPlot(title=self._text("第16章：全部五循环 F-v", "Section 16: all five F-v cycles"))
         plot.setLabel("bottom", self._text("压缩正向速度", "Compression-positive velocity"), units="m/s")
         plot.setLabel("left", self._text("测量力", "Measured force"), units="N")
-        data = dataset.data
+        data = frame
         t = data[TIME].to_numpy(float)
         v = data[VELOCITY].to_numpy(float) if VELOCITY in data else np.gradient(data[DISP].to_numpy(float), t) / 1000.0
         for cycle in range(5):
