@@ -58,6 +58,20 @@ def _first_level_crossing(
 
 
 def _robust_noise(values: np.ndarray) -> float:
+    """Robust high-frequency noise estimate.
+
+    The first-difference MAD keeps slow in-stroke force trends (for example the
+    compression force ramping with displacement during a current step) out of
+    the noise estimate.  A level MAD would treat such a real, monotonic
+    response as noise and hide genuine current-step separations behind an
+    inflated threshold.
+    """
+    values = np.asarray(values, dtype=float)
+    if len(values) >= 3:
+        diffs = np.diff(values)
+        median = float(np.median(diffs))
+        mad = float(np.median(np.abs(diffs - median)))
+        return float(1.4826 * mad / np.sqrt(2.0))
     median = float(np.median(values))
     return float(1.4826 * np.median(np.abs(values - median)))
 

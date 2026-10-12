@@ -90,3 +90,23 @@ def test_short_spike_does_not_become_valid_t90_crossing():
     )
     assert crossing is not None and 0.043 < crossing < 0.046
     assert np.isfinite(settled) and settled > crossing
+
+
+def test_compression_in_stroke_trend_is_not_mistaken_for_noise():
+    """A monotonic in-stroke compression force trend must not inflate the noise
+    estimate and hide a genuine current-step response behind an oversized
+    separation threshold (regression: 1.6A -> 0.95A compression produced
+    'No Response' rows and no marker lines)."""
+    t = np.arange(0.0, 0.45, 1.0 / 4096.0)
+    current = np.where(t < 0.29, 1.6, 0.95)
+    displacement = -0.131 * t * 1000.0
+    force = -172.0 - 449.0 * (t / 0.39)
+    frame = pd.DataFrame({TIME: t, DISP: displacement, LOAD: force, CURRENT: current})
+    result = analyze_response_time_v074(
+        DataSet(frame, Path("compression-trend.dat"), "synthetic"),
+        ResponseConfig(standard=ResponseStandard.BMW),
+        target_speed_tolerance=0.15,
+    )
+    row = result.events.iloc[0]
+    assert row["Response Type"] == "Normal Response"
+    assert np.isfinite(row["Switch Time t90 ms"])
