@@ -414,6 +414,7 @@ def analyze_map_files(
     max_speed_mps: float = MAX_MAP_SPEED_MPS,
     soft_current_a: float = 0.3,
     hard_current_a: float = 1.6,
+    profile: str = "AUDI",
 ) -> MapAnalysisResult:
     # The current is always derived again from the source filename.  This keeps
     # the result traceable and prevents stale or manually altered table values.
@@ -509,9 +510,17 @@ def analyze_map_files(
     ]
     for column in force_velocity.columns[1:]:
         force_velocity[column] = force_velocity[column].round().astype("Int64")
+    profile_name = profile.strip().upper()
+    if profile_name not in {"AUDI", "BMW"}:
+        raise ValueError(f"Unsupported damping-force profile: {profile}")
+    standard_label = (
+        "Audi VR-EF-33-2p5 sections 20/21"
+        if profile_name == "AUDI"
+        else "BMW CDC full-current damping-force map (per-speed current sweep)"
+    )
     return MapAnalysisResult(
         pd.DataFrame(file_rows), detail, pd.DataFrame(linearity_rows), pd.DataFrame(spread_rows), force_velocity,
-        {"Standard": "Audi VR-EF-33-2p5 sections 20/21", "Maximum Speed m/s": max_speed_mps, "Soft Current A": used_soft_a, "Hard Current A": used_hard_a, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema; softest/hardest current step anchors per speed and direction", "Current Source": "automatically parsed from every filename", "Repeat Handling": "last retained repeat at equal current/speed/direction (last complete cycle of the last file)"},
+        {"Standard": standard_label, "Maximum Speed m/s": max_speed_mps, "Soft Current A": used_soft_a, "Hard Current A": used_hard_a, "Evaluation": "last complete cycle; center 10% full stroke; directional extrema; softest/hardest current step anchors per speed and direction", "Current Source": "automatically parsed from every filename", "Repeat Handling": "last retained repeat at equal current/speed/direction (last complete cycle of the last file)"},
     )
 
 

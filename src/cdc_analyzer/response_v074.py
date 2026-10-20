@@ -600,13 +600,14 @@ def analyze_response_time_v074(
         else:
             status = "PASS" if switch90 <= config.t90_limit_ms else "FAIL"
 
-        # Widen the plot window beyond the event so the pre-response baseline and
-        # the post-response settling are both visible: 100 ms before the trigger
-        # and at least 200 ms after (2x t90 when the response is slower).
-        display_start = max(float(ts[0]), t0 - 0.100)
-        display_end = min(float(ts[-1]), t0 + 0.200)
+        # Widen the plot window well beyond the event so the pre-response
+        # baseline and the post-response settling are clearly visible: 500 ms
+        # before the trigger and at least 500 ms after (2x t90 when the
+        # response is slower), bounded by the full-file time axis.
+        display_start = max(float(t[0]), t0 - 0.500)
+        display_end = min(float(t[-1]), t0 + 0.500)
         if np.isfinite(switch90):
-            display_end = min(float(ts[-1]), max(display_end, t0 + 2.0 * switch90 / 1000.0))
+            display_end = min(float(t[-1]), max(display_end, t0 + 2.0 * switch90 / 1000.0))
 
         rows.append(
             {
